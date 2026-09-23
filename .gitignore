@@ -1,0 +1,15 @@
+# Gradle / build outputs
+.gradle/
+build/
+**/build/
+local.properties
+# IDE + OS
+.idea/
+*.iml
+.DS_Store
+# Never commit release artifacts
+*.apk
+*.aab
+# The debug keystore IS intentionally tracked (android/keystore/debug.keystore):
+# it keeps one signature across machines so APKs install as updates and the
+# Firebase SHA-1 stays valid. Debug key only — never use it for Play Store.
