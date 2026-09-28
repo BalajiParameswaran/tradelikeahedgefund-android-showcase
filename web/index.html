@@ -69,10 +69,11 @@ input::placeholder{color:var(--faint)}
 #tab-trade{scroll-margin-top:0}
 
 /* welcome carousel — 3 slides shown once after first sign-in */
-#welcomeGate{position:fixed;inset:0;z-index:10000;display:none;background:#000}
+#welcomeGate{position:fixed;inset:0;z-index:10000;display:none;background:#000;overflow:hidden}
 #welcomeGate.show{display:block}
-.wslide{position:absolute;inset:0;display:none;background-size:cover;background-position:center}
-.wslide.on{display:block}
+.wslide{position:absolute;inset:0;transform:translateX(100%);opacity:0;transition:transform 0.45s cubic-bezier(0.16,1,0.3,1), opacity 0.45s ease;background-size:cover;background-position:center;pointer-events:none}
+.wslide.on{transform:translateX(0);opacity:1;pointer-events:auto}
+.wslide.prev{transform:translateX(-100%);opacity:0;pointer-events:none}
 .wslide .shade{position:absolute;inset:0;background:linear-gradient(180deg,rgba(4,7,16,.25) 0%,rgba(4,7,16,.55) 45%,rgba(4,7,16,.92) 100%)}
 .wcopy{position:absolute;left:0;right:0;bottom:0;padding:26px 26px calc(30px + env(safe-area-inset-bottom))}
 .wkicker{display:inline-block;font-size:11px;letter-spacing:2px;color:var(--gold);border:1px solid var(--gold);border-radius:999px;padding:5px 12px;margin-bottom:12px}
@@ -3807,8 +3808,11 @@ const WELCOME_KEY = "tlhf_welcomed";
 let _wIdx = 0;
 function wShow(i){
   _wIdx = Math.max(0, Math.min(2, i));
-  document.querySelectorAll("#welcomeGate .wslide").forEach(s =>
-    s.classList.toggle("on", +s.dataset.ws === _wIdx));
+  document.querySelectorAll("#welcomeGate .wslide").forEach(s => {
+    const idx = +s.dataset.ws;
+    s.classList.toggle("on", idx === _wIdx);
+    s.classList.toggle("prev", idx < _wIdx);
+  });
 }
 function wDismiss(){
   try { localStorage.setItem(WELCOME_KEY, "1"); } catch(e){}

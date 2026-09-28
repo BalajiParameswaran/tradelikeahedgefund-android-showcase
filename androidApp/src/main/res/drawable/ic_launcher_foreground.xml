@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Launcher foreground: three bronze candlesticks climbing — the Wall Street theme. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- wicks -->
+    <path
+        android:strokeColor="#E9C766"
+        android:strokeWidth="2.5"
+        android:strokeLineCap="round"
+        android:pathData="M41,44 v36 M57,34 v36 M73,22 v36" />
+    <!-- candle bodies -->
+    <path
+        android:fillColor="#D4AF37"
+        android:pathData="M36,52 h10 v20 h-10 z M52,42 h10 v20 h-10 z M68,30 h10 v20 h-10 z" />
+</vector>

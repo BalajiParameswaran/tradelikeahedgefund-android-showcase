@@ -1,0 +1,213 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 60;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		94E17C6C9988B38A6F7AE620 /* TradeLikeAHedgeFundApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6BC72C5634FE645E57F8D379 /* TradeLikeAHedgeFundApp.swift */; };
+		35C129236A0067C788545EC9 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BE1CD5EAD37EE7672BF0382E /* ContentView.swift */; };
+		A2AF70F0B1A3003536CD2B6A /* Theme.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA2A32E6507F01F30E5EDE5C /* Theme.swift */; };
+		2376DC5179870BCEAA4132CB /* Models.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6410B3413A9FF801028A8ED4 /* Models.swift */; };
+		9693A80E6FA03C33ED364A3D /* PricingEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7281E8C9B64CD7633AA58BDE /* PricingEngine.swift */; };
+		2D30F8A4C6A1E68A5C3705E0 /* SharedBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = C7595674A18A90C887B18111 /* SharedBridge.swift */; };
+		177A4989054B6115E55AC3C7 /* TradeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4851E5CFF1F57DE05AA2F3B4 /* TradeView.swift */; };
+		483A774351734AEACA884E19 /* PortfolioView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B258C94648F3AB88B8194AB0 /* PortfolioView.swift */; };
+		BD747E1F94C0DA9654F8C6A1 /* LearnView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D034E12469C6B3E7BE01A8A1 /* LearnView.swift */; };
+		A3641D9C7D6B0BD1F8EF7C54 /* AccountView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 99D0D89D175B11F0ED033C1A /* AccountView.swift */; };
+		B2A2B728D86BE6E18BDEA19D /* Lessons.json in Resources */ = {isa = PBXBuildFile; fileRef = 351895F347F90F4A4F8D0778 /* Lessons.json */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXFileReference section */
+		6BC72C5634FE645E57F8D379 /* TradeLikeAHedgeFundApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TradeLikeAHedgeFundApp.swift; sourceTree = "<group>"; };
+		BE1CD5EAD37EE7672BF0382E /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
+		AA2A32E6507F01F30E5EDE5C /* Theme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Theme.swift; sourceTree = "<group>"; };
+		6410B3413A9FF801028A8ED4 /* Models.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Models.swift; sourceTree = "<group>"; };
+		7281E8C9B64CD7633AA58BDE /* PricingEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PricingEngine.swift; sourceTree = "<group>"; };
+		C7595674A18A90C887B18111 /* SharedBridge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SharedBridge.swift; sourceTree = "<group>"; };
+		4851E5CFF1F57DE05AA2F3B4 /* TradeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TradeView.swift; sourceTree = "<group>"; };
+		B258C94648F3AB88B8194AB0 /* PortfolioView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PortfolioView.swift; sourceTree = "<group>"; };
+		D034E12469C6B3E7BE01A8A1 /* LearnView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LearnView.swift; sourceTree = "<group>"; };
+		99D0D89D175B11F0ED033C1A /* AccountView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AccountView.swift; sourceTree = "<group>"; };
+		351895F347F90F4A4F8D0778 /* Lessons.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = Lessons.json; sourceTree = "<group>"; };
+		95E4525C565CC9D08E459F19 /* TradeLikeAHedgeFund.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = TradeLikeAHedgeFund.app; sourceTree = BUILT_PRODUCTS_DIR; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		CF5BDB0BEAFE176F9629192A /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		ADCF10F76EBF2A74473E9DC4 = {
+			isa = PBXGroup;
+			children = (
+				CF8D0BD4B75E8C2C174692A5 /* TradeLikeAHedgeFund */,
+				00C45FD35CB0F9C5F764F070 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		CF8D0BD4B75E8C2C174692A5 /* TradeLikeAHedgeFund */ = {
+			isa = PBXGroup;
+			children = (
+				6BC72C5634FE645E57F8D379 /* TradeLikeAHedgeFundApp.swift */, BE1CD5EAD37EE7672BF0382E /* ContentView.swift */, AA2A32E6507F01F30E5EDE5C /* Theme.swift */, 6410B3413A9FF801028A8ED4 /* Models.swift */, 7281E8C9B64CD7633AA58BDE /* PricingEngine.swift */, C7595674A18A90C887B18111 /* SharedBridge.swift */, 4851E5CFF1F57DE05AA2F3B4 /* TradeView.swift */, B258C94648F3AB88B8194AB0 /* PortfolioView.swift */, D034E12469C6B3E7BE01A8A1 /* LearnView.swift */, 99D0D89D175B11F0ED033C1A /* AccountView.swift */, 351895F347F90F4A4F8D0778 /* Lessons.json */,
+			);
+			path = TradeLikeAHedgeFund;
+			sourceTree = "<group>";
+		};
+		00C45FD35CB0F9C5F764F070 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				95E4525C565CC9D08E459F19 /* TradeLikeAHedgeFund.app */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		29C7B681C8D62CBAC94D51C0 /* TradeLikeAHedgeFund */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 7ADE71700E9404B10E13B577 /* Build configuration list for PBXNativeTarget "TradeLikeAHedgeFund" */;
+			buildPhases = (
+				1CDF2F71A52B082132B04DFF /* Sources */,
+				CF5BDB0BEAFE176F9629192A /* Frameworks */,
+				C02F1309AF4906C92F1EAD44 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = TradeLikeAHedgeFund;
+			productName = TradeLikeAHedgeFund;
+			productReference = 95E4525C565CC9D08E459F19 /* TradeLikeAHedgeFund.app */;
+			productType = "com.apple.product-type.application";
+		};
+
+
+
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		98F54143AB4E86B28C3AFEE0 /* Project object */ = {
+			isa = PBXProject;
+			buildConfigurationList = 12D04D787E90C9B967248BFD /* Build configuration list for PBXProject "TradeLikeAHedgeFund" */;
+			compatibilityVersion = "Xcode 15.0";
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				en,
+				Base,
+			);
+			mainGroup = ADCF10F76EBF2A74473E9DC4;
+			productRefGroup = 00C45FD35CB0F9C5F764F070 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				29C7B681C8D62CBAC94D51C0 /* TradeLikeAHedgeFund */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		C02F1309AF4906C92F1EAD44 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				B2A2B728D86BE6E18BDEA19D /* Lessons.json in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		1CDF2F71A52B082132B04DFF /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				94E17C6C9988B38A6F7AE620 /* TradeLikeAHedgeFundApp.swift in Sources */, 35C129236A0067C788545EC9 /* ContentView.swift in Sources */, A2AF70F0B1A3003536CD2B6A /* Theme.swift in Sources */, 2376DC5179870BCEAA4132CB /* Models.swift in Sources */, 9693A80E6FA03C33ED364A3D /* PricingEngine.swift in Sources */, 2D30F8A4C6A1E68A5C3705E0 /* SharedBridge.swift in Sources */, 177A4989054B6115E55AC3C7 /* TradeView.swift in Sources */, 483A774351734AEACA884E19 /* PortfolioView.swift in Sources */, BD747E1F94C0DA9654F8C6A1 /* LearnView.swift in Sources */, A3641D9C7D6B0BD1F8EF7C54 /* AccountView.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin XCBuildConfiguration section */
+		12D04D787E90C9B967248BFD /* Build configuration list for PBXProject "TradeLikeAHedgeFund" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				73BFC4993D558C2844970A56 /* Debug */,
+				3C5BC6FE1E438E679FB7F74F /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		7ADE71700E9404B10E13B577 /* Build configuration list for PBXNativeTarget "TradeLikeAHedgeFund" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				A45358D7F57D12409C956205 /* Debug */,
+				7A3CC3E65B4BE81911CE6871 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		73BFC4993D558C2844970A56 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ENABLE_MODULES = YES;
+				SWIFT_VERSION = 5.9;
+			};
+			name = Debug;
+		};
+		3C5BC6FE1E438E679FB7F74F /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ENABLE_MODULES = YES;
+				SWIFT_VERSION = 5.9;
+			};
+			name = Release;
+		};
+		A45358D7F57D12409C956205 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				INFOPLIST_FILE = "";
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.tradelikeahedgefund.app;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_VERSION = 5.9;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		7A3CC3E65B4BE81911CE6871 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				INFOPLIST_FILE = "";
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.tradelikeahedgefund.app;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_VERSION = 5.9;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+
+	};
+	rootObject = 98F54143AB4E86B28C3AFEE0 /* Project object */;
+}

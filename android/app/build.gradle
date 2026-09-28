@@ -23,10 +23,14 @@ android {
     }
     signingConfigs {
         release {
-            storeFile file("../../../tradelikeahedgefund.keystore")
-            storePassword file("../../../.keystore_pass").text.trim()
-            keyAlias "tradelikeahedgefund"
-            keyPassword file("../../../.keystore_pass").text.trim()
+            def keystoreFile = file("../../../tradelikeahedgefund.keystore")
+            def passFile = file("../../../.keystore_pass")
+            if (keystoreFile.exists() && passFile.exists()) {
+                storeFile keystoreFile
+                storePassword passFile.text.trim()
+                keyAlias "tradelikeahedgefund"
+                keyPassword passFile.text.trim()
+            }
         }
         // Debug key ships inside the project (android/keystore/debug.keystore) so every
         // machine that builds this repo signs with the SAME key: APKs install as updates
