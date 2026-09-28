@@ -1,0 +1,15 @@
+{
+	"appId": "com.tradelikeahedgefund.app",
+	"appName": "Trade Like a Hedge Fund",
+	"plugins": {
+		"FirebaseAuthentication": {
+			"providers": [
+				"google.com",
+				"phone",
+				"apple.com"
+			],
+			"skipNativeAuth": false
+		}
+	},
+	"webDir": "www"
+}

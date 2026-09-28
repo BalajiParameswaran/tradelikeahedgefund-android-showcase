@@ -1,7 +1,0 @@
-<?xml version='1.0' encoding='utf-8'?>
-<resources>
-    <string name="app_name">Trade Like a Hedge Fund</string>
-    <string name="title_activity_main">Trade Like a Hedge Fund</string>
-    <string name="package_name">com.tradelikeahedgefund.app</string>
-    <string name="custom_url_scheme">com.tradelikeahedgefund.app</string>
-</resources>
