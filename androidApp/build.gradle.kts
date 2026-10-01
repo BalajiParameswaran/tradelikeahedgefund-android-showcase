@@ -15,8 +15,8 @@ android {
         applicationId = "com.tradelikeahedgefund.app"
         minSdk = 26
         targetSdk = 35
-        versionCode = 1
-        versionName = "5.0.0"
+        versionCode = 24
+        versionName = "5.1.0"
     }
 
     buildTypes {
@@ -60,4 +60,11 @@ dependencies {
     // an honest "not configured" state instead of crashing.
     implementation(platform("com.google.firebase:firebase-bom:34.19.0"))
     implementation("com.google.firebase:firebase-auth")
+
+    // On-device AI: MediaPipe LLM Inference (reads the downloaded .task model).
+    // Same artifact + version the previous hybrid app used (0.10.35).
+    implementation("com.google.mediapipe:tasks-genai:0.10.35")
+    // EncryptedSharedPreferences for the AI chat store (no plaintext chat logs).
+    implementation("androidx.security:security-crypto:1.1.0-alpha06")
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.2")
 }

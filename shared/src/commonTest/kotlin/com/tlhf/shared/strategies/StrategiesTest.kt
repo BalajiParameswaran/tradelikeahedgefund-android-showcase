@@ -63,3 +63,68 @@ class StrategiesTest {
         assertTrue(r.breakevens.any { abs(it - 103.0) < 0.5 }, "breakevens=${r.breakevens}")
     }
 }
+
+class ChartMathTest {
+    private val legs = listOf(Leg(100.0, isCall = true, isLong = true, premium = 5.0))
+    private val r = analyze(StrategyType.LEAPS_CALL, legs, stockPrice = 100.0)
+
+    @Test
+    fun payoffRangeIsSixtyToOneFortyOfCenter() {
+        val (lo, hi) = payoffRange(100.0)
+        assertEquals(60.0, lo, 1e-9)
+        assertEquals(140.0, hi, 1e-9)
+    }
+
+    @Test
+    fun samplePayoffCoversRangeAndMatchesAnalyze() {
+        val (lo, hi) = payoffRange(100.0)
+        val samples = samplePayoff(r.payoffAt, lo, hi)
+        assertEquals(121, samples.size)
+        assertEquals(lo, samples.first().first, 1e-9)
+        assertEquals(hi, samples.last().first, 1e-9)
+        // Every sample agrees with the strategy payoff function.
+        samples.forEach { (p, v) -> assertEquals(r.payoffAt(p), v, 1e-9) }
+    }
+
+    @Test
+    fun payoffBoundsNeverCollapse() {
+        val (minA, maxA) = payoffBounds(listOf(0.0 to 3.0, 100.0 to 3.0))
+        assertTrue(maxA >= 1.0 && minA <= -1.0, "bounds must keep zero visible")
+        assertTrue(maxA > minA)
+    }
+
+    @Test
+    fun payoffBoundsIgnoreNonFinite() {
+        val (minA, maxA) = payoffBounds(
+            listOf(0.0 to Double.POSITIVE_INFINITY, 1.0 to 5.0, 2.0 to Double.NEGATIVE_INFINITY)
+        )
+        assertEquals(5.0, maxA, 1e-9)
+        assertEquals(-1.0, minA, 1e-9)
+    }
+
+    @Test
+    fun clampScrubKeepsPriceInRange() {
+        val (lo, hi) = payoffRange(100.0)
+        assertEquals(lo, clampScrub(-1000.0, lo, hi), 1e-9)
+        assertEquals(hi, clampScrub(9999.0, lo, hi), 1e-9)
+        assertEquals(100.0, clampScrub(100.0, lo, hi), 1e-9)
+    }
+
+    @Test
+    fun nearestBreakevenSnapsWithinTolerance() {
+        val bes = listOf(95.0, 105.0)
+        assertEquals(105.0, nearestBreakeven(bes, 104.0, tolerance = 2.0))
+        assertEquals(null, nearestBreakeven(bes, 100.0, tolerance = 2.0))
+        assertEquals(null, nearestBreakeven(emptyList(), 100.0, tolerance = 5.0))
+    }
+
+    @Test
+    fun longCallPayoffIsZeroAtBreakeven() {
+        // Long 100 call @ 5 premium breaks even at 105.
+        val be = r.breakevens.single()
+        assertEquals(105.0, be, 1e-6)
+        assertEquals(0.0, r.payoffAt(be), 1e-6)
+        assertTrue(r.payoffAt(106.0) > 0)
+        assertTrue(r.payoffAt(104.0) < 0)
+    }
+}

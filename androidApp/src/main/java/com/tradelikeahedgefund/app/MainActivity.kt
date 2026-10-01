@@ -19,7 +19,9 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -41,13 +43,28 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         setContent {
             TlhfTheme {
+                var tradeQuestion by remember { mutableStateOf<String?>(null) }
+                var tradeSymbol by remember { mutableStateOf<String?>(null) }
+                var selected by remember { mutableIntStateOf(0) }
                 val tabs = listOf(
-                    Tab("Trade", Icons.Filled.ShowChart, { TradeScreen() }),
-                    Tab("Portfolio", Icons.Filled.Home, { PortfolioScreen() }),
-                    Tab("Learn", Icons.Filled.Info, { LearnScreen() }),
+                    Tab("Trade", Icons.Filled.ShowChart, {
+                        TradeScreen(
+                            onAskTutor = { q -> tradeQuestion = q; selected = 2 },
+                            externalSymbol = tradeSymbol,
+                            onExternalConsumed = { tradeSymbol = null }
+                        )
+                    }),
+                    Tab("Portfolio", Icons.Filled.Home, {
+                        PortfolioScreen(onTradeSymbol = { s -> tradeSymbol = s; selected = 0 })
+                    }),
+                    Tab("Learn", Icons.Filled.Info, {
+                        LearnScreen(
+                            externalQuestion = tradeQuestion,
+                            onExternalConsumed = { tradeQuestion = null }
+                        )
+                    }),
                     Tab("Account", Icons.Filled.AccountCircle, { AccountScreen() })
                 )
-                var selected by remember { mutableIntStateOf(0) }
                 Scaffold(
                     containerColor = com.tradelikeahedgefund.app.ui.theme.NavyBg,
                     bottomBar = {

@@ -1,71 +1,53 @@
-# Trade Like a Hedge Fund — native rebuild
+# On-device AI module — patch contents
 
-Two native UIs over **one** shared backend, matching the top-apps pattern:
+Unzip at the **repository root** (the folder that contains `androidApp/`,
+`iosApp/`, `shared/`). All paths below are repo-root-relative.
 
-| Part | Tech | Location |
-|---|---|---|
-| Shared backend | Kotlin Multiplatform (`:shared`) | `shared/` |
-| Android UI | Jetpack Compose + Material3 | `androidApp/` |
-| iOS UI | SwiftUI (iOS 17+, Swift 5.9) | `iosApp/` |
+## New files
 
-## What lives in the shared backend (`:shared`)
+Shared KMP (`shared/src/commonMain/kotlin/com/tlhf/shared/ai/`):
+- `AiModels.kt` — bundled model catalog (Faster 0.5B / Balanced 1.5B)
+- `AiChat.kt` — encrypted chat sessions, 10 sessions x 40 messages
+- `AiDownload.kt` — download state, retry/backoff, 30-min idle unload
+- `LlmEngine.kt` — platform engine interface
+- `AiPrompts.kt` — tutor/topic/study/mistake prompts + card parser
+- `FlashDecks.kt` — static 54-card deck, shuffling, best scores
 
-- `pricing/BlackScholes.kt` — Black-Scholes price + Greeks (delta, gamma, theta, vega, rho), implied vol by bisection. Pure Kotlin, no platform deps.
-- `strategies/Strategies.kt` — `analyze()` for 9 strategy types: max profit/loss, breakevens, margin, per-leg plain-English risk text. **Money convention:** per-share P&L summed first, ×100 exactly once (the v3.6 100×-off bug class is covered by `StrategiesTest.ironCondorMathIsPerShareTimes100Not100xOff`).
-- `data/MarketData.kt` — `Quote`, `OptionChain`, `Greeks`, `DataResult` (provider-isolated errors).
-- `data/EtradeAuth.kt` — E*TRADE OAuth 1.0a signing: pure-Kotlin SHA-1/HMAC-SHA1, signature base string, `Authorization` header builder. Unit-tested against known vectors.
-- `data/TradierClient.kt` — Ktor quote + option chains, explicit prod/sandbox host toggle (a production token against the wrong host was the classic failure).
-- `data/YahooClient.kt` — Yahoo chart API with query1→query2 fallback; the cookie+crumb handshake quirk is documented in a TODO.
-- `learn/LearnContent.kt` — all 6 lessons + 30 quiz questions ported from the web app's `LESSONS`/`FLASH_EXTRA` data (HTML stripped to plain text, answer indices preserved), plus a `buildFlashcards()` helper.
+Shared tests (`shared/src/commonTest/kotlin/com/tlhf/shared/ai/`):
+- `AiChatTest.kt`, `AiPromptsTest.kt`, `AiDownloadTest.kt`, `FlashDecksTest.kt`
+  (40/40 tests pass: `./gradlew :shared:jvmTest`)
 
-## Build & test
+Android (`androidApp/src/main/java/com/tradelikeahedgefund/app/`):
+- `ai/AiPlatform.kt`, `ai/ModelDownloader.kt`, `ai/MediaPipeEngine.kt`
+- `ui/AiTutorScreen.kt`, `ui/AiTopicsScreen.kt`, `ui/FlashcardsScreen.kt`
 
-**Verified 2026-09-27 PDT in the Linux sandbox:** `:shared:jvmTest` — all 14
-unit tests pass; `:androidApp:assembleDebug` — APK builds successfully.
+iOS (`iosApp/TradeLikeAHedgeFund/`):
+- `AiModels.swift`, `AiPrompts.swift`, `AiChatStore.swift`,
+  `ModelDownloader.swift`, `LlamaEngine.swift`, `AiController.swift`,
+  `AiTutorView.swift`, `AiTopicsView.swift`, `FlashcardsView.swift`,
+  `DynamicCardsView.swift`
+- `../README-IOS-AI.md` — one-time llama.cpp Xcode setup (5 min)
 
-### Shared + Android
+## Modified files
 
-```bash
-cd native
-echo "sdk.dir=$ANDROID_HOME" > local.properties   # point at your Android SDK
-gradle :shared:jvmTest            # shared-backend unit tests
-gradle :androidApp:assembleDebug  # APK -> androidApp/build/outputs/apk/debug/
-```
+- `androidApp/src/main/java/com/tradelikeahedgefund/app/ui/LearnScreen.kt`
+  — Learn tab now has Lessons | Flashcards | AI Topics | AI Tutor sub-tabs
+- `androidApp/build.gradle.kts`
+  — adds `com.google.mediapipe:tasks-genai:0.10.35` and
+    `androidx.security:security-crypto:1.1.0-alpha06`
+- `iosApp/TradeLikeAHedgeFund/LearnView.swift` — same sub-tab structure
+- `iosApp/TradeLikeAHedgeFund.xcodeproj/project.pbxproj`
+  — registers the 10 new Swift files
 
-Plugin markers resolve via `pluginManagement` in `settings.gradle.kts`
-(Google Maven + Maven Central — the Gradle plugin portal is not used).
+## After applying
 
-Pinned versions (all confirmed downloadable on 2026-09-28): Kotlin 2.4.20,
-Ktor 2.3.13, AGP 8.7.3, Compose BOM 2025.10.00, Firebase BOM 34.19.0,
-kotlinx-coroutines 1.10.2, kotlinx-serialization-json 1.9.0.
+- Android: build normally (`assembleDebug` verified). No google-services.json
+  needed for the AI screens.
+- iOS: follow `iosApp/README-IOS-AI.md` step 1 (add llama.cpp), then build.
 
-### iOS (macOS + Xcode only — cannot build in this Linux sandbox)
+## Privacy notes
 
-```bash
-open iosApp/TradeLikeAHedgeFund.xcodeproj   # hand-authored, 10 Swift files + Lessons.json
-```
-
-The SwiftUI app **compiles standalone today**: `PricingEngine.swift` is a
-pure-Swift mirror of the KMP math and the views talk to it through the
-`PricingService` protocol. To switch the iOS app onto the real shared core:
-
-1. On your Mac: `./gradlew :shared:assembleXCFramework`
-2. Drag `shared.xcframework` into the Xcode target's Frameworks
-3. Swap `LocalPricingService` for the `KmpPricingService` sketch in `SharedBridge.swift` (views don't change)
-
-Sign the app with your own Apple Developer team (CODE_SIGN_STYLE is Automatic; no provisioning profiles are bundled).
-
-## Secrets
-
-There are **none** in this tree — no `google-services.json`, no
-`GoogleService-Info.plist`, no keystores, no API keys/tokens. Enabling
-Firebase Auth is a documented manual step:
-
-- **Android:** download `google-services.json` into `androidApp/`, apply the `com.google.gms.google-services` plugin in `androidApp/build.gradle.kts`, add your SHA-1 in the Firebase console. Until then `AccountScreen` shows an honest "not configured" state (the plugin is deliberately *not* applied so the app compiles without the file).
-- **iOS:** add `GoogleService-Info.plist` to the Xcode target and flip `firebaseReady` in `AccountView.swift`.
-
-## Honest status
-
-- **Android: verified.** `:shared:jvmTest` — 14/14 tests pass (Black-Scholes known values, put-call parity, iron-condor $100/$400 math, covered-call cap, HMAC-SHA1 RFC vector). `:androidApp:assembleDebug` — builds a working APK (`com.tradelikeahedgefund.app`, v5.0.0, minSdk 26, targetSdk 35).
-- **iOS: not compiled.** No Xcode in this Linux sandbox. The project is hand-authored and statically checked (10 Swift files, all brace-balanced; all pbxproj object IDs resolve; Lessons.json bundled). It compiles standalone via `PricingEngine.swift`; plug in the KMP XCFramework on a Mac per the steps above. Treat the Swift pricing file as the test oracle until then.
-- Stubs (render empty/honest states, never invented data): `PortfolioScreen` holdings storage + broker sync, Google sign-in button, Yahoo cookie+crumb handshake retry, E*TRADE full OAuth connect flow UI.
+- The model catalog is bundled in the app — no remote fetch.
+- Models download once from the URL shown in the picker, then run offline.
+- Android: models in app-private `filesDir/ai/`; chats in EncryptedSharedPreferences.
+- iOS: models in Application Support `tlhf/ai/`; chats in the Keychain.

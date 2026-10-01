@@ -1,6 +1,8 @@
 package com.tradelikeahedgefund.app.ui
 
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -12,6 +14,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -20,20 +23,32 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExposedDropdownMenuBox
 import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.nativeCanvas
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.tlhf.shared.pricing.bsGreeks
 import com.tlhf.shared.strategies.Leg
 import com.tlhf.shared.strategies.StrategyResult
@@ -82,10 +97,21 @@ private fun money(v: Double): String {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun TradeScreen() {
+fun TradeScreen(
+    onAskTutor: (String) -> Unit = {},
+    externalSymbol: String? = null,
+    onExternalConsumed: () -> Unit = {}
+) {
     var type by remember { mutableStateOf(StrategyType.COVERED_CALL) }
     var expanded by remember { mutableStateOf(false) }
     var symbol by remember { mutableStateOf("AAPL") }
+
+    LaunchedEffect(externalSymbol) {
+        if (externalSymbol != null) {
+            symbol = externalSymbol
+            onExternalConsumed()
+        }
+    }
     var stockPrice by remember { mutableStateOf("100") }
     var dte by remember { mutableStateOf("45") }
     var iv by remember { mutableStateOf("30") }
@@ -192,10 +218,25 @@ fun TradeScreen() {
                     StatRow("Breakevens", r.breakevens.joinToString(", ") { "$${"%.2f".format(it)}" }, Ink)
                     if (r.marginRequired > 0) StatRow("Margin required", money(r.marginRequired), Ink)
                     Spacer(Modifier.height(4.dp))
-                    PayoffChart(r.payoffAt, stockPrice.toDoubleOrNull() ?: 100.0)
+                    PayoffChart(r, stockPrice.toDoubleOrNull() ?: 100.0)
                     Spacer(Modifier.height(4.dp))
                     Text("Plain-English risks", color = BronzeGold, style = MaterialTheme.typography.labelLarge)
                     r.plainEnglishRisks.forEach { Text("• $it", color = Ink, style = MaterialTheme.typography.bodyMedium) }
+                    Spacer(Modifier.height(4.dp))
+                    OutlinedButton(
+                        onClick = {
+                            val typeName = type.name.replace('_', ' ').lowercase()
+                                .replaceFirstChar { it.uppercase() }
+                            val s0 = stockPrice.toDoubleOrNull() ?: 0.0
+                            val be = r.breakevens.joinToString(", ") { "$${"%.2f".format(it)}" }
+                            onAskTutor(
+                                "I'm looking at a $typeName on $symbol with the stock at ${money(s0)}. " +
+                                    "Max profit ${money(r.maxProfit)}, max loss ${money(r.maxLoss)}, " +
+                                    "breakeven(s) at $be. Explain the key risks of this trade in plain English."
+                            )
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    ) { Text("Ask tutor about this trade") }
                 }
             }
             // Greeks for the first leg (priced with the shared Black-Scholes core).
@@ -225,26 +266,148 @@ private fun StatRow(label: String, value: String, color: androidx.compose.ui.gra
 }
 
 @Composable
-private fun PayoffChart(payoffAt: (Double) -> Double, center: Double) {
+private fun PayoffChart(r: StrategyResult, center: Double) {
     val lo = center * 0.6
     val hi = center * 1.4
-    Canvas(Modifier.fillMaxWidth().height(180.dp)) {
-        val n = 120
-        val vals = (0..n).map { i -> val p = lo + (hi - lo) * i / n; p to payoffAt(p) }
-        val finite = vals.map { it.second }.filter { it.isFinite() }
-        val maxA = (finite.maxOrNull() ?: 1.0).coerceAtLeast(1.0)
-        val minA = (finite.minOrNull() ?: -1.0).coerceAtMost(-1.0)
-        fun X(p: Double) = (size.width * (p - lo) / (hi - lo)).toFloat()
-        fun Y(v: Double) = (size.height * (1 - (v - minA) / (maxA - minA))).toFloat()
-        // zero line
-        drawLine(BronzeGold.copy(alpha = 0.5f), Offset(0f, Y(0.0)), Offset(size.width, Y(0.0)), strokeWidth = 2f)
-        // center line
-        drawLine(Muted.copy(alpha = 0.4f), Offset(X(center), 0f), Offset(X(center), size.height), strokeWidth = 1f)
-        val path = Path()
-        vals.forEachIndexed { i, (p, v) ->
-            val vv = v.coerceIn(minA, maxA)
-            if (i == 0) path.moveTo(X(p), Y(vv)) else path.lineTo(X(p), Y(vv))
+    // Scrub position resets whenever a fresh analysis is produced.
+    var scrub by remember(r) { mutableStateOf(center) }
+    var beInfo by remember { mutableStateOf<Double?>(null) }
+    val density = LocalDensity.current
+    val pl = r.payoffAt(scrub)
+
+    fun xToPrice(xPx: Float, widthPx: Float): Double =
+        (xPx / widthPx * (hi - lo) + lo).coerceIn(lo, hi)
+
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Row(
+            Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                "Drag the chart or the slider",
+                color = Muted,
+                style = MaterialTheme.typography.labelMedium
+            )
+            Text(
+                "${money(scrub)} → ${money(pl)}",
+                color = if (pl >= 0) BullGreen else BearRed,
+                style = MaterialTheme.typography.labelLarge
+            )
         }
-        drawPath(path, BullGreen, style = Stroke(width = 4f))
+        Canvas(
+            Modifier
+                .fillMaxWidth()
+                .height(200.dp)
+                .pointerInput(r) {
+                    detectTapGestures { offset ->
+                        val w = size.width.toFloat()
+                        val x = { p: Double -> (w * (p - lo) / (hi - lo)).toFloat() }
+                        val tappedBe = r.breakevens.minByOrNull { be ->
+                            kotlin.math.abs(x(be) - offset.x)
+                        }
+                        if (tappedBe != null &&
+                            kotlin.math.abs(x(tappedBe) - offset.x) < 28.dp.toPx()
+                        ) {
+                            beInfo = tappedBe
+                        } else {
+                            scrub = xToPrice(offset.x, w)
+                        }
+                    }
+                }
+                .pointerInput(r) {
+                    detectDragGestures(
+                        onDragStart = { offset -> scrub = xToPrice(offset.x, size.width.toFloat()) },
+                        onDrag = { change, _ -> scrub = xToPrice(change.position.x, size.width.toFloat()) }
+                    )
+                }
+        ) {
+            val w = size.width
+            fun x(p: Double) = (w * (p - lo) / (hi - lo)).toFloat()
+            val n = 120
+            val vals = (0..n).map { i -> val p = lo + (hi - lo) * i / n; p to r.payoffAt(p) }
+            val finite = vals.map { it.second }.filter { it.isFinite() }
+            val maxA = (finite.maxOrNull() ?: 1.0).coerceAtLeast(1.0)
+            val minA = (finite.minOrNull() ?: -1.0).coerceAtMost(-1.0)
+            fun y(v: Double) = (size.height * (1 - (v - minA) / (maxA - minA))).toFloat()
+
+            // Zero P&L line.
+            drawLine(BronzeGold.copy(alpha = 0.5f), Offset(0f, y(0.0)), Offset(w, y(0.0)), strokeWidth = 2.dp.toPx())
+            // Spot price line.
+            drawLine(Muted.copy(alpha = 0.4f), Offset(x(center), 0f), Offset(x(center), size.height), strokeWidth = 1.dp.toPx())
+            // Payoff curve.
+            val path = Path()
+            vals.forEachIndexed { i, (p, v) ->
+                val vv = v.coerceIn(minA, maxA)
+                if (i == 0) path.moveTo(x(p), y(vv)) else path.lineTo(x(p), y(vv))
+            }
+            drawPath(path, BullGreen, style = Stroke(width = 3.dp.toPx()))
+            // Breakeven markers on the zero line — tap one for an explanation.
+            r.breakevens.forEach { be ->
+                drawCircle(BronzeGold, radius = 7.dp.toPx(), center = Offset(x(be), y(0.0)))
+                drawCircle(Color.White, radius = 3.dp.toPx(), center = Offset(x(be), y(0.0)))
+            }
+            // Scrubber crosshair + dot on the curve.
+            val sx = x(scrub)
+            drawLine(
+                Color.White.copy(alpha = 0.7f),
+                Offset(sx, 0f), Offset(sx, size.height),
+                strokeWidth = 1.dp.toPx()
+            )
+            drawCircle(Color.White, radius = 6.dp.toPx(), center = Offset(sx, y(pl)))
+            drawCircle(BronzeGold, radius = 6.dp.toPx(), center = Offset(sx, y(pl)), style = Stroke(width = 2.dp.toPx()))
+
+            // Tooltip label near the scrub point.
+            val label = "${money(scrub)} · P&L ${money(pl)}"
+            val paint = android.graphics.Paint().apply {
+                color = android.graphics.Color.WHITE
+                textSize = with(density) { 13.sp.toPx() }
+                isAntiAlias = true
+            }
+            val tw = paint.measureText(label)
+            val pad = with(density) { 8.dp.toPx() }
+            val boxW = tw + pad * 2
+            val boxH = with(density) { 28.dp.toPx() }
+            val boxX = (sx + with(density) { 10.dp.toPx() }).coerceIn(0f, (w - boxW).coerceAtLeast(0f))
+            val boxY = with(density) { 6.dp.toPx() }
+            drawRoundRect(
+                Color(0xFF101826),
+                topLeft = Offset(boxX, boxY),
+                size = Size(boxW, boxH),
+                cornerRadius = CornerRadius(with(density) { 6.dp.toPx() })
+            )
+            drawRoundRect(
+                BronzeGold.copy(alpha = 0.6f),
+                topLeft = Offset(boxX, boxY),
+                size = Size(boxW, boxH),
+                cornerRadius = CornerRadius(with(density) { 6.dp.toPx() }),
+                style = Stroke(width = 1.dp.toPx())
+            )
+            drawContext.canvas.nativeCanvas.drawText(
+                label, boxX + pad, boxY + boxH / 2 + paint.textSize * 0.35f, paint
+            )
+        }
+        Slider(
+            value = scrub.toFloat(),
+            onValueChange = { scrub = it.toDouble().coerceIn(lo, hi) },
+            valueRange = lo.toFloat()..hi.toFloat(),
+            modifier = Modifier.fillMaxWidth()
+        )
+    }
+
+    beInfo?.let { be ->
+        AlertDialog(
+            onDismissRequest = { beInfo = null },
+            title = { Text("Breakeven ${money(be)}") },
+            text = {
+                Text(
+                    "The stock price at expiry where this trade breaks even — profit is exactly $0. " +
+                        "Drag the scrubber across this point on the chart and watch the P&L flip sign."
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = { beInfo = null }) { Text("Got it") }
+            }
+        )
     }
 }

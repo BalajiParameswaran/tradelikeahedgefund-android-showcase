@@ -15,7 +15,19 @@
 		2D30F8A4C6A1E68A5C3705E0 /* SharedBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = C7595674A18A90C887B18111 /* SharedBridge.swift */; };
 		177A4989054B6115E55AC3C7 /* TradeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4851E5CFF1F57DE05AA2F3B4 /* TradeView.swift */; };
 		483A774351734AEACA884E19 /* PortfolioView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B258C94648F3AB88B8194AB0 /* PortfolioView.swift */; };
+		F1A2B3C4D5E60718293A4B5D /* PortfolioEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1A2B3C4D5E60718293A4B5C /* PortfolioEngine.swift */; };
+		F2A2B3C4D5E60718293A4B5F /* PortfolioStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = E2A2B3C4D5E60718293A4B5E /* PortfolioStore.swift */; };
 		BD747E1F94C0DA9654F8C6A1 /* LearnView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D034E12469C6B3E7BE01A8A1 /* LearnView.swift */; };
+		0B6CBBAEB1DFF1E5FCB536D4 /* AiModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8907848798E5487AC6D9E234 /* AiModels.swift */; };
+		A90BC0D615E3B97B7D6CBB77 /* AiPrompts.swift in Sources */ = {isa = PBXBuildFile; fileRef = D58310550587F1FD19BD4307 /* AiPrompts.swift */; };
+		7AC44E10D563BED9784A3F81 /* AiChatStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = B38B354C92C1732E573231F1 /* AiChatStore.swift */; };
+		177894A51FEFBFBBBA5ED75F /* ModelDownloader.swift in Sources */ = {isa = PBXBuildFile; fileRef = 55A7B2F0164AFA11154BB19C /* ModelDownloader.swift */; };
+		80C70D69FA72204B258288B2 /* LlamaEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = 495E0380369DB370BE0EC926 /* LlamaEngine.swift */; };
+		7B45E6B360F9E1C02434F672 /* AiController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 89A7D4BCF49A35797C5EF747 /* AiController.swift */; };
+		FD6E2CD8FFBA6FC65E0991B6 /* AiTutorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 534A41F12497567D913E657D /* AiTutorView.swift */; };
+		4A3D659CE7FAFB79DEA65EEB /* AiTopicsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0F900A7C5A7F0A4214BBCC5 /* AiTopicsView.swift */; };
+		6AFBD47F26FCF54CBAE62A38 /* FlashcardsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 67EFB7CE7F4FB410403668F2 /* FlashcardsView.swift */; };
+		711E63EE0182C736D56422CC /* DynamicCardsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D8555916B6BCDB5C21037003 /* DynamicCardsView.swift */; };
 		A3641D9C7D6B0BD1F8EF7C54 /* AccountView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 99D0D89D175B11F0ED033C1A /* AccountView.swift */; };
 		B2A2B728D86BE6E18BDEA19D /* Lessons.json in Resources */ = {isa = PBXBuildFile; fileRef = 351895F347F90F4A4F8D0778 /* Lessons.json */; };
 /* End PBXBuildFile section */
@@ -29,7 +41,19 @@
 		C7595674A18A90C887B18111 /* SharedBridge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SharedBridge.swift; sourceTree = "<group>"; };
 		4851E5CFF1F57DE05AA2F3B4 /* TradeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TradeView.swift; sourceTree = "<group>"; };
 		B258C94648F3AB88B8194AB0 /* PortfolioView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PortfolioView.swift; sourceTree = "<group>"; };
+		E1A2B3C4D5E60718293A4B5C /* PortfolioEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PortfolioEngine.swift; sourceTree = "<group>"; };
+		E2A2B3C4D5E60718293A4B5E /* PortfolioStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PortfolioStore.swift; sourceTree = "<group>"; };
 		D034E12469C6B3E7BE01A8A1 /* LearnView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LearnView.swift; sourceTree = "<group>"; };
+		8907848798E5487AC6D9E234 /* AiModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AiModels.swift; sourceTree = "<group>"; };
+		D58310550587F1FD19BD4307 /* AiPrompts.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AiPrompts.swift; sourceTree = "<group>"; };
+		B38B354C92C1732E573231F1 /* AiChatStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AiChatStore.swift; sourceTree = "<group>"; };
+		55A7B2F0164AFA11154BB19C /* ModelDownloader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModelDownloader.swift; sourceTree = "<group>"; };
+		495E0380369DB370BE0EC926 /* LlamaEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LlamaEngine.swift; sourceTree = "<group>"; };
+		89A7D4BCF49A35797C5EF747 /* AiController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AiController.swift; sourceTree = "<group>"; };
+		534A41F12497567D913E657D /* AiTutorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AiTutorView.swift; sourceTree = "<group>"; };
+		F0F900A7C5A7F0A4214BBCC5 /* AiTopicsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AiTopicsView.swift; sourceTree = "<group>"; };
+		67EFB7CE7F4FB410403668F2 /* FlashcardsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FlashcardsView.swift; sourceTree = "<group>"; };
+		D8555916B6BCDB5C21037003 /* DynamicCardsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DynamicCardsView.swift; sourceTree = "<group>"; };
 		99D0D89D175B11F0ED033C1A /* AccountView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AccountView.swift; sourceTree = "<group>"; };
 		351895F347F90F4A4F8D0778 /* Lessons.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = Lessons.json; sourceTree = "<group>"; };
 		95E4525C565CC9D08E459F19 /* TradeLikeAHedgeFund.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = TradeLikeAHedgeFund.app; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -57,7 +81,17 @@
 		CF8D0BD4B75E8C2C174692A5 /* TradeLikeAHedgeFund */ = {
 			isa = PBXGroup;
 			children = (
-				6BC72C5634FE645E57F8D379 /* TradeLikeAHedgeFundApp.swift */, BE1CD5EAD37EE7672BF0382E /* ContentView.swift */, AA2A32E6507F01F30E5EDE5C /* Theme.swift */, 6410B3413A9FF801028A8ED4 /* Models.swift */, 7281E8C9B64CD7633AA58BDE /* PricingEngine.swift */, C7595674A18A90C887B18111 /* SharedBridge.swift */, 4851E5CFF1F57DE05AA2F3B4 /* TradeView.swift */, B258C94648F3AB88B8194AB0 /* PortfolioView.swift */, D034E12469C6B3E7BE01A8A1 /* LearnView.swift */, 99D0D89D175B11F0ED033C1A /* AccountView.swift */, 351895F347F90F4A4F8D0778 /* Lessons.json */,
+				6BC72C5634FE645E57F8D379 /* TradeLikeAHedgeFundApp.swift */, BE1CD5EAD37EE7672BF0382E /* ContentView.swift */, AA2A32E6507F01F30E5EDE5C /* Theme.swift */, 6410B3413A9FF801028A8ED4 /* Models.swift */, 7281E8C9B64CD7633AA58BDE /* PricingEngine.swift */, C7595674A18A90C887B18111 /* SharedBridge.swift */, 4851E5CFF1F57DE05AA2F3B4 /* TradeView.swift */, B258C94648F3AB88B8194AB0 /* PortfolioView.swift */, E1A2B3C4D5E60718293A4B5C /* PortfolioEngine.swift */, E2A2B3C4D5E60718293A4B5E /* PortfolioStore.swift */, D034E12469C6B3E7BE01A8A1 /* LearnView.swift */, 99D0D89D175B11F0ED033C1A /* AccountView.swift */, 351895F347F90F4A4F8D0778 /* Lessons.json */,
+				8907848798E5487AC6D9E234 /* AiModels.swift */,
+				D58310550587F1FD19BD4307 /* AiPrompts.swift */,
+				B38B354C92C1732E573231F1 /* AiChatStore.swift */,
+				55A7B2F0164AFA11154BB19C /* ModelDownloader.swift */,
+				495E0380369DB370BE0EC926 /* LlamaEngine.swift */,
+				89A7D4BCF49A35797C5EF747 /* AiController.swift */,
+				534A41F12497567D913E657D /* AiTutorView.swift */,
+				F0F900A7C5A7F0A4214BBCC5 /* AiTopicsView.swift */,
+				67EFB7CE7F4FB410403668F2 /* FlashcardsView.swift */,
+				D8555916B6BCDB5C21037003 /* DynamicCardsView.swift */,
 			);
 			path = TradeLikeAHedgeFund;
 			sourceTree = "<group>";
@@ -132,7 +166,17 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				94E17C6C9988B38A6F7AE620 /* TradeLikeAHedgeFundApp.swift in Sources */, 35C129236A0067C788545EC9 /* ContentView.swift in Sources */, A2AF70F0B1A3003536CD2B6A /* Theme.swift in Sources */, 2376DC5179870BCEAA4132CB /* Models.swift in Sources */, 9693A80E6FA03C33ED364A3D /* PricingEngine.swift in Sources */, 2D30F8A4C6A1E68A5C3705E0 /* SharedBridge.swift in Sources */, 177A4989054B6115E55AC3C7 /* TradeView.swift in Sources */, 483A774351734AEACA884E19 /* PortfolioView.swift in Sources */, BD747E1F94C0DA9654F8C6A1 /* LearnView.swift in Sources */, A3641D9C7D6B0BD1F8EF7C54 /* AccountView.swift in Sources */,
+				94E17C6C9988B38A6F7AE620 /* TradeLikeAHedgeFundApp.swift in Sources */, 35C129236A0067C788545EC9 /* ContentView.swift in Sources */, A2AF70F0B1A3003536CD2B6A /* Theme.swift in Sources */, 2376DC5179870BCEAA4132CB /* Models.swift in Sources */, 9693A80E6FA03C33ED364A3D /* PricingEngine.swift in Sources */, 2D30F8A4C6A1E68A5C3705E0 /* SharedBridge.swift in Sources */, 177A4989054B6115E55AC3C7 /* TradeView.swift in Sources */, 483A774351734AEACA884E19 /* PortfolioView.swift in Sources */, F1A2B3C4D5E60718293A4B5D /* PortfolioEngine.swift in Sources */, F2A2B3C4D5E60718293A4B5F /* PortfolioStore.swift in Sources */, BD747E1F94C0DA9654F8C6A1 /* LearnView.swift in Sources */, A3641D9C7D6B0BD1F8EF7C54 /* AccountView.swift in Sources */,
+				0B6CBBAEB1DFF1E5FCB536D4 /* AiModels.swift in Sources */,
+				A90BC0D615E3B97B7D6CBB77 /* AiPrompts.swift in Sources */,
+				7AC44E10D563BED9784A3F81 /* AiChatStore.swift in Sources */,
+				177894A51FEFBFBBBA5ED75F /* ModelDownloader.swift in Sources */,
+				80C70D69FA72204B258288B2 /* LlamaEngine.swift in Sources */,
+				7B45E6B360F9E1C02434F672 /* AiController.swift in Sources */,
+				FD6E2CD8FFBA6FC65E0991B6 /* AiTutorView.swift in Sources */,
+				4A3D659CE7FAFB79DEA65EEB /* AiTopicsView.swift in Sources */,
+				6AFBD47F26FCF54CBAE62A38 /* FlashcardsView.swift in Sources */,
+				711E63EE0182C736D56422CC /* DynamicCardsView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
