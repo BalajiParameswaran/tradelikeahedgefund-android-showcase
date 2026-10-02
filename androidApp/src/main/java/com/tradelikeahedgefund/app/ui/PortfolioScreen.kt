@@ -2,6 +2,7 @@ package com.tradelikeahedgefund.app.ui
 
 import com.tradelikeahedgefund.app.ai.AiPlatform
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -52,6 +53,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import com.tlhf.shared.data.DataResult
 import com.tlhf.shared.data.Quote
+import com.tlhf.shared.data.TickerDirectory
 import com.tlhf.shared.data.YahooClient
 import com.tlhf.shared.portfolio.PortfolioState
 import com.tlhf.shared.portfolio.Position
@@ -354,7 +356,7 @@ fun PortfolioScreen(onTradeSymbol: (String) -> Unit = {}) {
             title = { Text("Add to watchlist", color = Ink) },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedTextField(sym, { sym = it; err = null }, label = { Text("Ticker") }, singleLine = true)
+                    TickerInputField(sym, { sym = it; err = null }, label = "Ticker")
                     if (err != null) Text(err!!, color = BearRed, style = MaterialTheme.typography.bodySmall)
                 }
             },
@@ -379,7 +381,7 @@ fun PortfolioScreen(onTradeSymbol: (String) -> Unit = {}) {
             title = { Text(if (posDialogFor != null) "Edit position" else "Add position", color = Ink) },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedTextField(sym, { sym = it; err = null }, label = { Text("Ticker") }, singleLine = true, enabled = posDialogFor == null)
+                    TickerInputField(sym, { sym = it; err = null }, label = "Ticker", enabled = posDialogFor == null)
                     OutlinedTextField(shares, { shares = it; err = null }, label = { Text("Shares") }, singleLine = true)
                     OutlinedTextField(avg, { avg = it; err = null }, label = { Text("Average cost per share") }, singleLine = true)
                     if (err != null) Text(err!!, color = BearRed, style = MaterialTheme.typography.bodySmall)
@@ -396,6 +398,59 @@ fun PortfolioScreen(onTradeSymbol: (String) -> Unit = {}) {
             },
             dismissButton = { TextButton(onClick = { showAddPos = false; editPos = null }) { Text("Cancel") } }
         )
+    }
+}
+
+@Composable
+private fun TickerInputField(
+    value: String,
+    onValueChange: (String) -> Unit,
+    label: String = "Ticker",
+    enabled: Boolean = true
+) {
+    val suggestions = remember(value) { TickerDirectory.search(value) }
+
+    Column {
+        OutlinedTextField(
+            value = value,
+            onValueChange = onValueChange,
+            label = { Text(label) },
+            singleLine = true,
+            enabled = enabled,
+            modifier = Modifier.fillMaxWidth()
+        )
+        if (enabled && suggestions.isNotEmpty() && value.trim().uppercase() != suggestions.firstOrNull()?.symbol) {
+            Card(
+                colors = CardDefaults.cardColors(containerColor = NavySurface),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 4.dp)
+            ) {
+                Column(Modifier.padding(vertical = 4.dp)) {
+                    suggestions.forEach { item ->
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { onValueChange(item.symbol) }
+                                .padding(horizontal = 12.dp, vertical = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = item.symbol,
+                                color = BronzeGold,
+                                style = MaterialTheme.typography.titleSmall,
+                                modifier = Modifier.padding(end = 8.dp)
+                            )
+                            Text(
+                                text = item.name,
+                                color = Muted,
+                                style = MaterialTheme.typography.bodySmall
+                            )
+                        }
+                    }
+                }
+            }
+        }
     }
 }
 

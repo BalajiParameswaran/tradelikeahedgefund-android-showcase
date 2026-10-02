@@ -17,6 +17,7 @@ android {
         targetSdk = 35
         versionCode = 24
         versionName = "5.1.0"
+        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
     buildTypes {
@@ -67,4 +68,12 @@ dependencies {
     // EncryptedSharedPreferences for the AI chat store (no plaintext chat logs).
     implementation("androidx.security:security-crypto:1.1.0-alpha06")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.2")
+
+    // Testing Framework
+    testImplementation("junit:junit:4.13.2")
+    testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.10.2")
+    androidTestImplementation("androidx.test.ext:junit:1.2.1")
+    androidTestImplementation("androidx.test.espresso:espresso-core:3.6.1")
+    androidTestImplementation("androidx.compose.ui:ui-test-junit4")
+    debugImplementation("androidx.compose.ui:ui-test-manifest")
 }
