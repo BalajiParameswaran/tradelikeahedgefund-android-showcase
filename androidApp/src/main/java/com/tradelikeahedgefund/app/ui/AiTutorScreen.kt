@@ -51,6 +51,9 @@ import com.tlhf.shared.ai.DownloadProgress
 import com.tlhf.shared.ai.LlmEngine
 import com.tlhf.shared.ai.ModelState
 import com.tlhf.shared.ai.aiModelById
+import com.tlhf.shared.ai.allFlashDecks
+import com.tlhf.shared.ai.partialProgress
+import com.tlhf.shared.learn.LESSONS
 import com.tlhf.shared.ai.aiStudyPrompt
 import com.tlhf.shared.ai.buildTutorPrompt
 import com.tlhf.shared.ai.formatBytes
@@ -59,6 +62,8 @@ import com.tlhf.shared.ai.matchLessonTitle
 import com.tlhf.shared.ai.parseAiCards
 import com.tlhf.shared.ai.DynamicCard
 import com.tlhf.shared.ai.shouldAutoUnload
+import com.tlhf.shared.learn.LESSONS
+import com.tlhf.shared.learn.buildFlashcards
 import com.tradelikeahedgefund.app.ai.AiPlatform
 import com.tradelikeahedgefund.app.ai.MediaPipeEngine
 import com.tradelikeahedgefund.app.ai.ModelDownloader
@@ -98,17 +103,32 @@ class AiTutorController(private val context: Context) {
     var error by mutableStateOf<String?>(null)
     var lastQuestion by mutableStateOf("")
     var studyCards by mutableStateOf<List<DynamicCard>>(emptyList())
+    var studyNote by mutableStateOf<String?>(null)
     var studyBusy by mutableStateOf(false)
+
+    /** True while the download loop is parked by pauseDownload(). */
+    private var downloadPaused = false
 
     fun refresh() {
         val check = AiPlatform.deviceCheck(context)
         deviceNote = if (check.supported) null else "On-device AI unavailable: ${check.reason}"
         val file = AiPlatform.modelFile(context, model)
         modelState = when {
+            downloader.isRunning && downloadPaused -> ModelState.PAUSED
             downloader.isRunning -> ModelState.DOWNLOADING
             engineLoaded -> ModelState.READY
             file.exists() -> ModelState.DOWNLOADED
-            else -> ModelState.NOT_DOWNLOADED
+            else -> {
+                // A leftover .part file means an earlier download was cut off
+                // (app killed, phone rebooted, connection lost): surface it as
+                // a resumable pause with real progress instead of pretending
+                // nothing was ever downloaded.
+                val part = downloader.partBytes(file)
+                if (part > 0) {
+                    progress = partialProgress(part, model.sizeBytes)
+                    ModelState.PAUSED
+                } else ModelState.NOT_DOWNLOADED
+            }
         }
         sessions = chatStore.load()
         if (activeId == null) activeId = sessions.firstOrNull()?.id
@@ -135,7 +155,7 @@ class AiTutorController(private val context: Context) {
         error = null
         val dest = AiPlatform.modelFile(context, model)
         val reason = downloader.start(
-            model.androidUrl, dest, wifiOnly,
+            model.androidUrl, dest, model.sizeBytes, wifiOnly,
             isWifiNow = { AiPlatform.isWifi(context) },
             listener = object : ModelDownloader.Listener {
                 override fun onProgress(d: Long, t: Long) { ui {
@@ -154,15 +174,16 @@ class AiTutorController(private val context: Context) {
             }
         )
         if (reason != null) error = if (reason == "wifi_required") "Connect to WiFi to download the model (or allow cellular below)." else reason
-        else modelState = ModelState.DOWNLOADING
+        else { downloadPaused = false; modelState = ModelState.DOWNLOADING }
     }
 
-    fun pauseDownload() { downloader.pause(); modelState = ModelState.PAUSED }
+    fun pauseDownload() { downloadPaused = true; downloader.pause(); modelState = ModelState.PAUSED }
     fun resumeDownload() {
         val dest = AiPlatform.modelFile(context, model)
-        downloader.resume(model.androidUrl, dest, wifiOnly, { AiPlatform.isWifi(context) },
+        val reason = downloader.resume(model.androidUrl, dest, model.sizeBytes, wifiOnly, { AiPlatform.isWifi(context) },
             listener = downloadListener())
-        modelState = ModelState.DOWNLOADING
+        if (reason != null) error = if (reason == "wifi_required") "Connect to WiFi to download the model (or allow cellular below)." else reason
+        else { downloadPaused = false; modelState = ModelState.DOWNLOADING }
     }
     private fun downloadListener() = object : ModelDownloader.Listener {
         override fun onProgress(d: Long, t: Long) { ui {
@@ -174,7 +195,13 @@ class AiTutorController(private val context: Context) {
             else refresh()
         } }
     }
-    fun cancelDownload() { downloader.cancel() }
+    fun cancelDownload() {
+        downloadPaused = false
+        downloader.cancel()
+        // Cancel keeps the partial file (Delete is the destructive action);
+        // refresh re-derives the honest state (Paused if a .part remains).
+        refresh()
+    }
 
     fun deleteModel() {
         downloader.delete(AiPlatform.modelFile(context, model))
@@ -229,6 +256,7 @@ class AiTutorController(private val context: Context) {
         messages = emptyList()
         streaming = ""
         studyCards = emptyList()
+        studyNote = null
         lastQuestion = ""
     }
 
@@ -237,6 +265,7 @@ class AiTutorController(private val context: Context) {
         messages = chatStore.get(id)?.messages ?: emptyList()
         streaming = ""
         studyCards = emptyList()
+        studyNote = null
     }
 
     fun deleteSession(id: String) {
@@ -266,7 +295,12 @@ class AiTutorController(private val context: Context) {
         busy = true
         streaming = ""
         studyCards = emptyList()
+        studyNote = null
         lastQuestion = text
+        // History for the prompt is what came BEFORE this question — the
+        // builder appends the new question itself; including it in the
+        // history too would ask it twice.
+        val priorHistory = messages
         chatStore.addMessage(sessionId, "user", text)
         messages = chatStore.get(sessionId)?.messages ?: emptyList()
         touchUsed()
@@ -274,7 +308,7 @@ class AiTutorController(private val context: Context) {
         val prompt = buildTutorPrompt(
             market = marketContext(ticker, null, null, null),
             portfolioJson = "{}",
-            history = messages,
+            history = priorHistory,
             userText = text
         )
         engine.generate(
@@ -282,11 +316,16 @@ class AiTutorController(private val context: Context) {
             onToken = { partial -> ui { streaming = partial } },
             onDone = { full, err -> ui {
                 busy = false
+                val reply = full?.trim().orEmpty()
                 if (err != null) {
                     error = "Couldn't generate a reply: $err"
                     streaming = ""
+                } else if (reply.isEmpty()) {
+                    // Never persist an empty bubble: an empty completion is a
+                    // failure the user should see and retry, not a message.
+                    error = "The model didn't produce a reply — please try again."
+                    streaming = ""
                 } else {
-                    val reply = full.orEmpty()
                     chatStore.addMessage(sessionId, "bot", reply)
                     messages = chatStore.get(sessionId)?.messages ?: emptyList()
                     streaming = ""
@@ -299,6 +338,7 @@ class AiTutorController(private val context: Context) {
     fun makeStudyCards() {
         if (studyBusy || busy || !engineLoaded || lastQuestion.isEmpty()) return
         studyBusy = true
+        studyNote = null
         val label = matchLessonTitle(lastQuestion) ?: "Options basics"
         val prompt = aiStudyPrompt(label, ticker.uppercase(), null, lastQuestion)
         engine.generate(
@@ -306,12 +346,35 @@ class AiTutorController(private val context: Context) {
             onToken = {},
             onDone = { full, err -> ui {
                 studyBusy = false
-                if (err == null && full != null) {
-                    studyCards = parseAiCards(full, 6)
+                if (err != null) {
+                    error = "Couldn't make study cards: $err"
+                    return@ui
+                }
+                val parsed = if (full != null) parseAiCards(full, 6) else emptyList()
+                if (parsed.isNotEmpty()) {
+                    studyCards = parsed
                     touchUsed()
+                } else {
+                    // Designed fallback (same as the web app): if the small
+                    // model returns nothing usable, serve the built-in deck
+                    // for the matched lesson instead of a dead end.
+                    val fallback = staticStudyCards(label)
+                    if (fallback.isNotEmpty()) {
+                        studyCards = fallback
+                        studyNote = "The model didn't return usable cards, so here are the built-in cards for $label."
+                    } else {
+                        error = "The model didn't return usable cards — try again."
+                    }
                 }
             } }
         )
+    }
+
+    /** Built-in static cards for a lesson title, as tutor study cards. */
+    private fun staticStudyCards(label: String): List<DynamicCard> {
+        val lesson = LESSONS.firstOrNull { it.title == label } ?: return emptyList()
+        val deck = allFlashDecks().firstOrNull { it.id == "lesson_" + lesson.id } ?: return emptyList()
+        return deck.cards.take(6).map { DynamicCard(it.front, it.back) }
     }
 }
 @Composable
@@ -352,7 +415,30 @@ fun AiTutorScreen(
             }
         }
 
-        ModelCard(ctl)
+        // Search row: the question field is the primary element.
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+            TextField(
+                value = ctl.input,
+                onValueChange = { ctl.input = it },
+                placeholder = { Text("Ask anything about options…") },
+                singleLine = false,
+                maxLines = 3,
+                modifier = Modifier.weight(1f),
+                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
+                keyboardActions = KeyboardActions(onSend = { ctl.send() })
+            )
+            Button(onClick = { ctl.send() }, enabled = !ctl.busy && ctl.engineLoaded) { Text("Send") }
+        }
+        // Ticker row: small, under the search row.
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+            TextField(
+                value = ctl.ticker,
+                onValueChange = { ctl.ticker = it.uppercase().filter { ch -> ch.isLetter() }.take(6) },
+                label = { Text("Ticker (for market context)") },
+                singleLine = true,
+                modifier = Modifier.width(110.dp)
+            )
+        }
 
         if (ctl.error != null) {
             Text(ctl.error!!, color = BearRed, style = MaterialTheme.typography.bodySmall)
@@ -382,7 +468,19 @@ fun AiTutorScreen(
             }
         }
 
+        // Study cards: make button, then the generated-cards section.
+        OutlinedButton(
+            onClick = { ctl.makeStudyCards() },
+            enabled = ctl.studyBusy.not() && ctl.engineLoaded && !ctl.busy,
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Text(if (ctl.studyBusy) "Making cards…" else "Make study cards from this answer")
+        }
+
         // Study cards toggle
+        if (ctl.studyNote != null) {
+            Text(ctl.studyNote!!, color = Muted, style = MaterialTheme.typography.bodySmall)
+        }
         if (ctl.studyCards.isNotEmpty()) {
             OutlinedButton(onClick = { showStudyCards = !showStudyCards }, modifier = Modifier.fillMaxWidth()) {
                 Text(if (showStudyCards) "Hide study cards (${ctl.studyCards.size})" else "Show study cards (${ctl.studyCards.size})")
@@ -405,34 +503,36 @@ fun AiTutorScreen(
             }
         }
 
-        // Input
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-            TextField(
-                value = ctl.ticker,
-                onValueChange = { ctl.ticker = it.uppercase().filter { ch -> ch.isLetter() }.take(6) },
-                label = { Text("Ticker") },
-                singleLine = true,
-                modifier = Modifier.width(110.dp)
-            )
-            TextField(
-                value = ctl.input,
-                onValueChange = { ctl.input = it },
-                placeholder = { Text("Ask about options…") },
-                singleLine = false,
-                maxLines = 3,
-                modifier = Modifier.weight(1f),
-                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
-                keyboardActions = KeyboardActions(onSend = { ctl.send() })
-            )
-            Button(onClick = { ctl.send() }, enabled = !ctl.busy && ctl.engineLoaded) { Text("Send") }
+        // Fallback: built-in lesson-deck cards when no generated cards exist yet.
+        if (ctl.studyCards.isEmpty() && ctl.lastQuestion.isNotEmpty() && !ctl.studyBusy) {
+            val matchedLessonId = LESSONS.firstOrNull { it.title == matchLessonTitle(ctl.lastQuestion) }?.id
+            val fallbackCards = if (matchedLessonId != null) {
+                buildFlashcards().filter { it.lessonId == matchedLessonId }.take(6)
+            } else {
+                buildFlashcards().take(6)
+            }
+            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Text("From the lesson deck", color = BronzeGold, style = MaterialTheme.typography.titleSmall)
+                Text(
+                    "Generated cards appear here when the model is loaded — meanwhile, from the built-in deck:",
+                    color = Muted, style = MaterialTheme.typography.bodySmall
+                )
+                fallbackCards.forEach { card ->
+                    var flipped by remember(card) { mutableStateOf(false) }
+                    Card(
+                        colors = CardDefaults.cardColors(containerColor = NavySurface),
+                        modifier = Modifier.fillMaxWidth().clickable { flipped = !flipped }
+                    ) {
+                        Column(Modifier.padding(10.dp)) {
+                            Text(if (flipped) "Back — tap to flip" else "Front — tap to flip", color = Muted, style = MaterialTheme.typography.labelSmall)
+                            Text(if (flipped) card.back else card.front, color = Ink, style = MaterialTheme.typography.bodyMedium)
+                        }
+                    }
+                }
+            }
         }
-        OutlinedButton(
-            onClick = { ctl.makeStudyCards() },
-            enabled = ctl.studyBusy.not() && ctl.engineLoaded && !ctl.busy,
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Text(if (ctl.studyBusy) "Making cards…" else "Make study cards from this answer")
-        }
+
+        ModelCard(ctl)
     }
 
     if (showSessions) {
@@ -489,8 +589,27 @@ private fun ModelCard(ctl: AiTutorController) {
             }
 
             if (ctl.progress != null && (ctl.modelState == ModelState.DOWNLOADING || ctl.modelState == ModelState.PAUSED)) {
-                LinearProgressIndicator(progress = { ctl.progress!!.fraction }, modifier = Modifier.fillMaxWidth())
-                Text(ctl.progress!!.label, color = Muted, style = MaterialTheme.typography.bodySmall)
+                // Bull-branded download progress (whiteboard #2): icon,
+                // bar, percent and bytes — plus Pause/Resume right here so
+                // the user doesn't have to expand Manage mid-download.
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("🐂", style = MaterialTheme.typography.titleMedium)
+                    LinearProgressIndicator(progress = { ctl.progress!!.fraction }, modifier = Modifier.weight(1f))
+                    Text("${ctl.progress!!.percent}%", color = Ink, style = MaterialTheme.typography.bodySmall)
+                }
+                Text(
+                    ctl.progress!!.label + " downloaded" +
+                        if (ctl.modelState == ModelState.PAUSED) " — paused" else "",
+                    color = Muted, style = MaterialTheme.typography.bodySmall
+                )
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    if (ctl.modelState == ModelState.DOWNLOADING) {
+                        OutlinedButton(onClick = { ctl.pauseDownload() }) { Text("Pause") }
+                    } else {
+                        Button(onClick = { ctl.resumeDownload() }) { Text("Resume download") }
+                    }
+                    TextButton(onClick = { ctl.cancelDownload() }) { Text("Cancel", color = BearRed) }
+                }
             }
 
             if (expanded) {
