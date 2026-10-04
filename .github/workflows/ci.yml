@@ -3,8 +3,24 @@ name: Android & KMP CI
 on:
   push:
     branches: [ main, integrate/whiteboard-revamp ]
+    paths:
+      - 'androidApp/**'
+      - 'shared/**'
+      - 'build.gradle.kts'
+      - 'settings.gradle.kts'
+      - 'gradle.properties'
+      - 'gradle/**'
+      - '.github/workflows/ci.yml'
   pull_request:
     branches: [ main, integrate/whiteboard-revamp ]
+    paths:
+      - 'androidApp/**'
+      - 'shared/**'
+      - 'build.gradle.kts'
+      - 'settings.gradle.kts'
+      - 'gradle.properties'
+      - 'gradle/**'
+      - '.github/workflows/ci.yml'
 
 jobs:
   test:
