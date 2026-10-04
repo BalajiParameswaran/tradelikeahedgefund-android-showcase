@@ -46,6 +46,10 @@ data class OptionChain(
     val contracts: List<OptionContract> = emptyList()
 )
 
+/** One historical close. [epochMs] is milliseconds since epoch; [close] is the closing price. */
+@Serializable
+data class PricePoint(val epochMs: Long, val close: Double)
+
 /** Per-source errors stay isolated: a failing source never poisons the others. */
 sealed class DataResult<out T> {
     data class Ok<T>(val value: T, val latencyMs: Long) : DataResult<T>()

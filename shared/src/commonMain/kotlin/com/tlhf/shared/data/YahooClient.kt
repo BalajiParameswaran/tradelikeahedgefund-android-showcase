@@ -15,6 +15,12 @@ import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.longOrNull
 
+/** History window for [YahooClient.history]: Yahoo `range` + `interval` params. */
+enum class HistoryRange(val rangeParam: String, val intervalParam: String) {
+    ONE_DAY("1d", "5m"), ONE_WEEK("5d", "30m"), ONE_MONTH("1mo", "1d"),
+    THREE_MONTHS("3mo", "1d"), YEAR_TO_DATE("ytd", "1d")
+}
+
 /**
  * Yahoo Finance quote client.
  *
@@ -71,5 +77,65 @@ class YahooClient {
             }
         }
         return DataResult.Err("yahoo", lastErr)
+    }
+
+    /**
+     * Historical closes for [symbol] over [range]. Never invents points:
+     * only closes actually present in Yahoo's chart payload are returned,
+     * and a payload with no usable closes is treated as a failure.
+     */
+    suspend fun history(symbol: String, range: HistoryRange): DataResult<List<PricePoint>> {
+        val t0 = currentTimeMs()
+        var lastErr = "no host tried"
+        for (host in hosts) {
+            try {
+                val resp = client.get(
+                    "https://$host/v8/finance/chart/$symbol?range=${range.rangeParam}&interval=${range.intervalParam}&includePrePost=false"
+                ) {
+                    header("User-Agent", "Mozilla/5.0 (compatible; TLHF/5.0)")
+                }
+                if (!resp.status.isSuccess()) {
+                    lastErr = "HTTP ${resp.status.value} on $host"
+                    continue
+                }
+                val points = parseChartHistory(resp.body<String>())
+                if (points.isEmpty()) {
+                    lastErr = "no history for $symbol on $host"
+                    continue
+                }
+                return DataResult.Ok(points, currentTimeMs() - t0)
+            } catch (e: Exception) {
+                lastErr = e.message ?: "request failed"
+            }
+        }
+        return DataResult.Err("yahoo", lastErr)
+    }
+}
+
+/**
+ * Parses a Yahoo chart payload into sorted [PricePoint]s. Timestamps in the
+ * payload are SECONDS and are converted to milliseconds. Null closes and
+ * non-positive closes are skipped. Malformed payloads yield an empty list.
+ */
+internal fun parseChartHistory(jsonText: String): List<PricePoint> {
+    return try {
+        val json = Json { ignoreUnknownKeys = true }
+        val root = json.parseToJsonElement(jsonText).jsonObject
+        val result = root["chart"]?.jsonObject?.get("result")?.jsonArray
+            ?.firstOrNull()?.jsonObject ?: return emptyList()
+        val timestamps = result["timestamp"]?.jsonArray ?: return emptyList()
+        val closes = result["indicators"]?.jsonObject?.get("quote")?.jsonArray
+            ?.firstOrNull()?.jsonObject?.get("close")?.jsonArray ?: return emptyList()
+        val points = mutableListOf<PricePoint>()
+        val n = minOf(timestamps.size, closes.size)
+        for (i in 0 until n) {
+            val tsSec = timestamps[i].jsonPrimitive.longOrNull ?: continue
+            val close = closes[i].jsonPrimitive.doubleOrNull ?: continue
+            if (close <= 0.0) continue
+            points += PricePoint(epochMs = tsSec * 1000L, close = close)
+        }
+        points.sortedBy { it.epochMs }
+    } catch (e: Exception) {
+        emptyList()
     }
 }

@@ -18,13 +18,49 @@ struct TradeView: View {
     @State private var legs: [OptionLeg] = TradeView.defaultLegs(for: .coveredCall)
     @State private var analysis: StrategyAnalysis?
     @State private var riskLeg: UUID?
+    @State private var outlook: Outlook?
+    @State private var lessons: [Lesson] = []
+    @State private var quizOpen = false
+    /// Read-only snapshot of the user's positions for holder context: a
+    /// fresh PortfolioStore loads persisted state from the Keychain on
+    /// init. TradeView never mutates it — it only checks whether the
+    /// current symbol is held, to filter the strategy deck.
+    @StateObject private var portfolio = PortfolioStore()
+
+    /// Position matching the current symbol, if the user holds it.
+    private var held: Position? {
+        portfolio.positions.first { $0.symbol == symbol.uppercased() }
+    }
+
+    /// Strategy deck for the current outlook + holding state.
+    private var deck: [StrategyType] {
+        StrategyType.filterDeck(outlook: outlook, hasPosition: held != nil)
+    }
 
     var body: some View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 14) {
+                    Text("What do you think?")
+                        .font(.caption).foregroundColor(.muted)
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: 8) {
+                            outlookChip(label: "Any", selected: outlook == nil) { outlook = nil }
+                            ForEach(Outlook.allCases) { o in
+                                outlookChip(label: o.rawValue, selected: outlook == o) { outlook = o }
+                            }
+                        }
+                    }
+                    if let heldPos = held {
+                        Text("You hold \(trimNum(heldPos.shares)) shares of \(heldPos.symbol) — the deck is filtered to strategies that fit a holder" + (outlook != nil ? " and your outlook." : ""))
+                            .font(.caption).foregroundColor(.muted)
+                    } else if let outlook {
+                        Text("Showing strategies for a '\(outlook.rawValue)' outlook.")
+                            .font(.caption).foregroundColor(.muted)
+                    }
+
                     Picker("Strategy", selection: $type) {
-                        ForEach(StrategyType.allCases) { t in Text(t.rawValue).tag(t) }
+                        ForEach(deck) { t in Text(t.rawValue).tag(t) }
                     }
                     .pickerStyle(.menu)
                     .tint(.bronzeGold)
@@ -67,6 +103,14 @@ struct TradeView: View {
 
                     if let a = analysis {
                         resultCard(a)
+                        Button("Check your risk understanding") { quizOpen.toggle() }
+                            .buttonStyle(.bordered)
+                            .tint(.bronzeGold)
+                            .frame(maxWidth: .infinity)
+                        if quizOpen {
+                            RiskQuizView(type: type, lessons: lessons)
+                                .id(type)
+                        }
                         greeksCard()
                     }
                 }
@@ -74,6 +118,9 @@ struct TradeView: View {
             }
             .background(Color.navyBg)
             .navigationTitle("Trade")
+            .onAppear { loadLessons() }
+            .onChange(of: outlook) { enforceDeck() }
+            .onChange(of: symbol) { enforceDeck() }
             .onChange(of: externalSymbol) { s in
                 if let s { symbol = s; onExternalConsumed() }
             }
@@ -81,6 +128,42 @@ struct TradeView: View {
     }
 
     // MARK: - pieces
+
+    /// Outlook chip, styled like the Learn tab's tab chips.
+    private func outlookChip(label: String, selected: Bool, action: @escaping () -> Void) -> some View {
+        Button(label, action: action)
+            .font(.subheadline)
+            .foregroundColor(.ink)
+            .padding(.vertical, 8).padding(.horizontal, 12)
+            .background(selected ? Color.bronzeGold.opacity(0.25) : Color.navySurface)
+            .cornerRadius(8)
+    }
+
+    /// If the current strategy fell out of the (re-filtered) deck, snap to
+    /// the deck's first strategy and reset its legs/analysis — the same
+    /// reset the Picker's own onChange(of: type) performs.
+    private func enforceDeck() {
+        let d = deck
+        if !d.contains(type) {
+            let newType = d.first ?? .coveredCall
+            type = newType
+            legs = Self.defaultLegs(for: newType)
+            analysis = nil
+        }
+    }
+
+    /// Loads Lessons.json for the risk quiz — same pattern as LearnView.load().
+    private func loadLessons() {
+        guard lessons.isEmpty,
+              let url = Bundle.main.url(forResource: "Lessons", withExtension: "json"),
+              let data = try? Data(contentsOf: url),
+              let decoded = try? JSONDecoder().decode([Lesson].self, from: data) else { return }
+        lessons = decoded
+    }
+
+    private func trimNum(_ v: Double) -> String {
+        v == v.rounded() ? String(Int(v)) : String(v)
+    }
 
     private func labeled<Content: View>(_ title: String, @ViewBuilder _ content: () -> Content) -> some View {
         VStack(alignment: .leading, spacing: 4) {
@@ -185,6 +268,7 @@ struct TradeView: View {
 
     private func runAnalysis() {
         guard let s = Double(stockPrice), !legs.isEmpty else { return }
+        quizOpen = false
         let qty = type == .coveredCall ? 100 : 0
         analysis = pricing.analyze(type: type, legs: legs, stockPrice: s, stockQty: qty, stockCost: s)
     }
@@ -211,6 +295,107 @@ struct TradeView: View {
                                       OptionLeg(strike: 95, premium: 2.5, isCall: false, isLong: true)]
         case .leapsCall: return [OptionLeg(strike: 100, premium: 8, isCall: true, isLong: true)]
         }
+    }
+}
+
+/// "Check your risk understanding": the mapped lesson's first 5 questions
+/// (quiz + extraQuiz), answered one pick per question. Reimplements
+/// LearnView's QuizCardView styling locally (green/red reveal + explanation)
+/// with a score + verdict once every question is answered. Port of shared
+/// `riskQuizFor` / `riskVerdict` (RiskQuiz.kt): pass bar is 80%.
+private struct RiskQuizView: View {
+    let type: StrategyType
+    let lessons: [Lesson]
+
+    @State private var picked: [Int: Int] = [:]
+
+    private var lesson: Lesson? {
+        lessons.first { $0.id == lessonId(for: type) }
+    }
+
+    private var questions: [QuizQuestion] {
+        guard let lesson else { return [] }
+        return Array((lesson.quiz + lesson.extraQuiz).prefix(5))
+    }
+
+    private var correctCount: Int {
+        questions.enumerated().reduce(0) { acc, pair in
+            acc + (picked[pair.offset] == pair.element.answerIndex ? 1 : 0)
+        }
+    }
+
+    private var allAnswered: Bool {
+        !questions.isEmpty && picked.count == questions.count
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("Risk check — \(type.rawValue)")
+                .font(.headline).foregroundColor(.bronzeGold)
+            if lesson == nil {
+                Text("Quiz unavailable — lesson content didn't load.")
+                    .font(.caption).foregroundColor(.muted)
+            } else {
+                ForEach(Array(questions.enumerated()), id: \.element.id) { i, q in
+                    questionCard(index: i, question: q)
+                }
+                if allAnswered {
+                    verdictCard
+                }
+            }
+        }
+    }
+
+    private func questionCard(index: Int, question: QuizQuestion) -> some View {
+        let pick = picked[index]
+        return VStack(alignment: .leading, spacing: 8) {
+            Text("Q\(index + 1). \(question.question)").font(.body).foregroundColor(.ink)
+            ForEach(question.choices.indices, id: \.self) { ci in
+                Button { if picked[index] == nil { picked[index] = ci } } label: {
+                    Text(question.choices[ci])
+                        .foregroundColor(.ink)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(10)
+                        .background(
+                            pick == nil ? Color.navyBg :
+                            ci == question.answerIndex ? Color.bullGreen.opacity(0.25) :
+                            ci == pick ? Color.bearRed.opacity(0.25) : Color.navyBg
+                        )
+                        .cornerRadius(8)
+                }
+                .disabled(pick != nil)
+            }
+            if let pick {
+                Text(pick == question.answerIndex ? "Correct. " : "Not quite. ")
+                    .foregroundColor(pick == question.answerIndex ? .bullGreen : .bearRed)
+                Text(question.explanation).font(.body).foregroundColor(.muted)
+            }
+        }
+        .padding(12)
+        .background(Color.navySurface)
+        .cornerRadius(10)
+    }
+
+    private var verdictCard: some View {
+        let total = questions.count
+        let correct = correctCount
+        let passed = total > 0 && Double(correct) / Double(total) >= 0.8
+        return VStack(alignment: .leading, spacing: 8) {
+            if passed {
+                Text("You scored \(correct)/\(total) — you understand the risk on this trade.")
+                    .font(.body).bold().foregroundColor(.bullGreen)
+            } else {
+                Text("You scored \(correct)/\(total) — you don't yet understand the risk on this trade.")
+                    .font(.body).bold().foregroundColor(.bearRed)
+                Text("Review '\(lesson?.title ?? "")' in the Learn tab and re-read the plain-English risks above before trading this.")
+                    .font(.body).foregroundColor(.muted)
+            }
+            Button("Retake quiz") { picked = [:] }
+                .font(.caption).tint(.bronzeGold)
+        }
+        .padding(12)
+        .background(Color.navySurface)
+        .cornerRadius(10)
     }
 }
 
