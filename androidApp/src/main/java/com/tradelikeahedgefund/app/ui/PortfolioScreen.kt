@@ -1,9 +1,13 @@
 package com.tradelikeahedgefund.app.ui
 
 import com.tradelikeahedgefund.app.ai.AiPlatform
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -18,16 +22,21 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.ShowChart
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarDuration
@@ -49,19 +58,26 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import com.tlhf.shared.data.DataResult
+import com.tlhf.shared.data.HistoryRange
+import com.tlhf.shared.data.PricePoint
 import com.tlhf.shared.data.Quote
 import com.tlhf.shared.data.TickerDirectory
 import com.tlhf.shared.data.YahooClient
+import com.tlhf.shared.learn.LESSONS
 import com.tlhf.shared.portfolio.PortfolioState
 import com.tlhf.shared.portfolio.Position
 import com.tlhf.shared.portfolio.WatchEntry
 import com.tlhf.shared.portfolio.addWatch
 import com.tlhf.shared.portfolio.decodePortfolio
 import com.tlhf.shared.portfolio.encodePortfolio
+import com.tlhf.shared.portfolio.missingHistory
 import com.tlhf.shared.portfolio.missingQuotes
+import com.tlhf.shared.portfolio.portfolioValueSeries
 import com.tlhf.shared.portfolio.positionUnrealized
 import com.tlhf.shared.portfolio.positionsDayPnl
 import com.tlhf.shared.portfolio.positionsValue
@@ -74,6 +90,7 @@ import com.tradelikeahedgefund.app.ui.theme.BullGreen
 import com.tradelikeahedgefund.app.ui.theme.Ink
 import com.tradelikeahedgefund.app.ui.theme.Muted
 import com.tradelikeahedgefund.app.ui.theme.NavySurface
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
@@ -104,6 +121,7 @@ private sealed interface RemovedItem {
  * Quotes come from Yahoo via the shared client — never invented. Symbols with
  * no quote are excluded from totals and the UI says so explicitly.
  */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun PortfolioScreen(onTradeSymbol: (String) -> Unit = {}) {
     val context = LocalContext.current
@@ -118,6 +136,10 @@ fun PortfolioScreen(onTradeSymbol: (String) -> Unit = {}) {
     var showAddWatch by remember { mutableStateOf(false) }
     var showAddPos by remember { mutableStateOf(false) }
     var editPos by remember { mutableStateOf<Position?>(null) }
+    var sheetPos by remember { mutableStateOf<Position?>(null) }
+    var range by remember { mutableStateOf(HistoryRange.ONE_DAY) }
+    var histories by remember { mutableStateOf<Map<String, List<PricePoint>>>(emptyMap()) }
+    var historyLoading by remember { mutableStateOf(false) }
     val snackbar = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
     val yahoo = remember { YahooClient() }
@@ -158,6 +180,33 @@ fun PortfolioScreen(onTradeSymbol: (String) -> Unit = {}) {
         refreshQuotes()
     }
 
+    // Price history for the hero chart — position symbols only (watchlist
+    // symbols never count toward portfolio value). Only DataResult.Ok
+    // histories are kept; a symbol Yahoo gives no history for contributes
+    // nothing to the series and is named under the chart.
+    LaunchedEffect(range, state.positions.map { it.symbol }) {
+        val symbols = state.positions.map { it.symbol }.distinct()
+        if (symbols.isEmpty()) {
+            histories = emptyMap()
+            historyLoading = false
+            return@LaunchedEffect
+        }
+        historyLoading = true
+        try {
+            val results = withContext(Dispatchers.IO) {
+                symbols.map { sym -> async { sym to yahoo.history(sym, range) } }.awaitAll()
+            }
+            histories = results.mapNotNull { (sym, r) ->
+                (r as? DataResult.Ok)?.let { sym to it.value }
+            }.toMap()
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            histories = emptyMap()
+        }
+        historyLoading = false
+    }
+
     removed?.let { r ->
         LaunchedEffect(r) {
             val label = when (r) {
@@ -182,12 +231,16 @@ fun PortfolioScreen(onTradeSymbol: (String) -> Unit = {}) {
     val totalValue = positionsValue(state.positions, quotes)
     val dayPnl = positionsDayPnl(state.positions, quotes)
     val missing = missingQuotes(state.positions, quotes)
+    val series = remember(state.positions, histories) { portfolioValueSeries(state.positions, histories) }
+    val missingHist = remember(state.positions, histories) { missingHistory(state.positions, histories) }
 
     Scaffold(snackbarHost = { SnackbarHost(snackbar) }) { pad ->
         LazyColumn(
             Modifier.fillMaxSize().padding(pad).padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
+            item { E2eNotice() }
+
             item {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text("Portfolio", style = MaterialTheme.typography.headlineSmall, color = Ink, modifier = Modifier.weight(1f))
@@ -205,10 +258,89 @@ fun PortfolioScreen(onTradeSymbol: (String) -> Unit = {}) {
                         Text("Total value", color = Muted, style = MaterialTheme.typography.labelLarge)
                         Text(money2(totalValue), color = Ink, style = MaterialTheme.typography.headlineMedium)
                         val dayColor = if (dayPnl >= 0) BullGreen else BearRed
+                        val dayPct = if (totalValue - dayPnl > 0) dayPnl / (totalValue - dayPnl) * 100 else 0.0
                         Text(
-                            (if (dayPnl >= 0) "+" else "") + money2(dayPnl) + " today",
+                            "${signedMoney(dayPnl)} (${signedPct(dayPct)}) today",
                             color = dayColor, style = MaterialTheme.typography.titleMedium
                         )
+                        // Robinhood-style value chart over the selected range.
+                        // Accent follows the DAY's direction, per spec. Points
+                        // come only from Yahoo history — never fabricated.
+                        if (series.size >= 2) {
+                            Canvas(
+                                Modifier.fillMaxWidth().height(120.dp).padding(top = 8.dp, bottom = 4.dp)
+                            ) {
+                                val closes = series.map { it.close }
+                                var min = closes.minOrNull() ?: 0.0
+                                var max = closes.maxOrNull() ?: 0.0
+                                if (min == max) {
+                                    val padAmt = if (min == 0.0) 1.0 else abs(min) * 0.01
+                                    min -= padAmt
+                                    max += padAmt
+                                }
+                                val w = size.width
+                                val h = size.height
+                                fun x(i: Int) = w * i / (series.size - 1)
+                                fun y(v: Double) = (h * (1 - (v - min) / (max - min))).toFloat()
+                                val fillPath = Path()
+                                fillPath.moveTo(0f, h)
+                                series.forEachIndexed { i, pt -> fillPath.lineTo(x(i), y(pt.close)) }
+                                fillPath.lineTo(w, h)
+                                fillPath.close()
+                                drawPath(fillPath, dayColor.copy(alpha = 0.15f))
+                                val linePath = Path()
+                                series.forEachIndexed { i, pt ->
+                                    if (i == 0) linePath.moveTo(x(i), y(pt.close))
+                                    else linePath.lineTo(x(i), y(pt.close))
+                                }
+                                drawPath(linePath, dayColor, style = Stroke(width = 2.5.dp.toPx()))
+                            }
+                            if (missingHist.isNotEmpty()) {
+                                Text(
+                                    "Chart excludes ${missingHist.joinToString(", ")} — no price history.",
+                                    color = Muted, style = MaterialTheme.typography.bodySmall
+                                )
+                            }
+                        } else if (state.positions.isNotEmpty()) {
+                            Text(
+                                "Price history isn't available for this range right now.",
+                                color = Muted, style = MaterialTheme.typography.bodySmall,
+                                modifier = Modifier.padding(top = 4.dp)
+                            )
+                        }
+                        // Range selector.
+                        Row(
+                            Modifier.fillMaxWidth().padding(top = 8.dp),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            val rangeOptions = listOf(
+                                "1D" to HistoryRange.ONE_DAY,
+                                "1W" to HistoryRange.ONE_WEEK,
+                                "1M" to HistoryRange.ONE_MONTH,
+                                "3M" to HistoryRange.THREE_MONTHS,
+                                "YTD" to HistoryRange.YEAR_TO_DATE
+                            )
+                            rangeOptions.forEach { (label, r) ->
+                                val selected = r == range
+                                Card(
+                                    colors = CardDefaults.cardColors(
+                                        containerColor = if (selected) BronzeGold.copy(alpha = 0.25f) else NavySurface
+                                    ),
+                                    modifier = Modifier.clickable { range = r }
+                                ) {
+                                    Text(
+                                        label,
+                                        color = if (selected) BronzeGold else Muted,
+                                        style = MaterialTheme.typography.labelMedium,
+                                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
+                                    )
+                                }
+                            }
+                            if (historyLoading) {
+                                CircularProgressIndicator(strokeWidth = 2.dp)
+                            }
+                        }
                         val stamp = quotesAt?.let {
                             SimpleDateFormat("h:mm a", Locale.US).format(Date(it))
                         }
@@ -258,7 +390,9 @@ fun PortfolioScreen(onTradeSymbol: (String) -> Unit = {}) {
                     SwipeableRow(
                         onDelete = { save(removePosition(state, p.symbol)); removed = RemovedItem.Pos(p) },
                         onTrade = { onTradeSymbol(p.symbol) },
-                        onEdit = { editPos = p }
+                        onEdit = { editPos = p },
+                        onTap = { sheetPos = p },
+                        onSwipeRight = { editPos = p }
                     ) {
                         val q = quotes[p.symbol]
                         val (uPnl, uPct) = if (q != null) positionUnrealized(p, q.price) else 0.0 to 0.0
@@ -314,7 +448,10 @@ fun PortfolioScreen(onTradeSymbol: (String) -> Unit = {}) {
                     SwipeableRow(
                         onDelete = { save(removeWatch(state, w.symbol)); removed = RemovedItem.Watch(w) },
                         onTrade = { onTradeSymbol(w.symbol) },
-                        onEdit = null
+                        onEdit = null,
+                        onTap = { onTradeSymbol(w.symbol) },
+                        onSwipeRight = { onTradeSymbol(w.symbol) },
+                        swipeRightIsAnalyze = true
                     ) {
                         val q = quotes[w.symbol]
                         val cColor = if ((q?.change ?: 0.0) >= 0) BullGreen else BearRed
@@ -345,6 +482,20 @@ fun PortfolioScreen(onTradeSymbol: (String) -> Unit = {}) {
                     color = Muted, style = MaterialTheme.typography.bodySmall
                 )
             }
+        }
+    }
+
+    // Strategy teaching sheet for a tapped position.
+    sheetPos?.let { p ->
+        ModalBottomSheet(
+            onDismissRequest = { sheetPos = null },
+            containerColor = NavySurface
+        ) {
+            PositionStrategySheet(
+                position = p,
+                quote = quotes[p.symbol],
+                onAnalyze = { sheetPos = null; onTradeSymbol(p.symbol) }
+            )
         }
     }
 
@@ -461,36 +612,146 @@ private fun signedMoney(v: Double): String = (if (v >= 0) "+" else "") + money2(
 
 private fun signedPct(v: Double): String = (if (v >= 0) "+" else "") + "%.2f%%".format(v)
 
+/**
+ * Plain-English strategy ideas for one holding, taught with the shared Learn
+ * lessons (covered call, cash-secured put, LEAPS). Educational only — the
+ * only numbers shown are the user's own position and its live quote.
+ */
+@Composable
+private fun PositionStrategySheet(
+    position: Position,
+    quote: Quote?,
+    onAnalyze: () -> Unit
+) {
+    val p = position
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .verticalScroll(rememberScrollState())
+            .padding(horizontal = 20.dp, vertical = 8.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        Text(
+            "${p.symbol} — strategies for your holding",
+            color = Ink, style = MaterialTheme.typography.titleLarge
+        )
+        val holdingLine = buildString {
+            append("${trimNum(p.shares)} shares @ ${money2(p.avgCost)}")
+            if (quote != null) {
+                val (_, uPct) = positionUnrealized(p, quote.price)
+                append(" · now ${money2(quote.price)} (${signedPct(uPct)})")
+            } else {
+                append(" · quote unavailable right now")
+            }
+        }
+        Text(holdingLine, color = Muted, style = MaterialTheme.typography.bodyMedium)
+
+        for (lessonId in listOf("coveredCall", "cashPut", "leapsCall")) {
+            val lesson = LESSONS.firstOrNull { it.id == lessonId } ?: continue
+            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Text(lesson.title, color = BronzeGold, style = MaterialTheme.typography.titleMedium)
+                Text(lesson.tagline, color = Ink, style = MaterialTheme.typography.bodyMedium)
+                lesson.learn.forEach { bullet ->
+                    Text("• $bullet", color = Ink, style = MaterialTheme.typography.bodyMedium)
+                }
+                if (lessonId == "coveredCall") {
+                    val contracts = (p.shares / 100).toInt()
+                    Text(
+                        if (contracts >= 1)
+                            "Your ${trimNum(p.shares)} shares can support $contracts covered-call contract${if (contracts == 1) "" else "s"}."
+                        else
+                            "Covered calls need 100 shares per contract — this position isn't there yet.",
+                        color = Muted, style = MaterialTheme.typography.bodyMedium
+                    )
+                }
+            }
+        }
+
+        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Text("Save from earnings", color = BronzeGold, style = MaterialTheme.typography.titleMedium)
+            Text(
+                "Before an earnings report, option premiums usually swell because a big move is " +
+                    "expected. Some holders sell a covered call into that — collecting a richer " +
+                    "premium in exchange for capping their gains if the stock pops on the news. " +
+                    "The catch: if earnings crush it, your shares can be called away at the " +
+                    "strike right after the run-up.",
+                color = Ink, style = MaterialTheme.typography.bodyMedium
+            )
+        }
+
+        Button(onClick = onAnalyze, modifier = Modifier.fillMaxWidth()) {
+            Text("Analyze ${p.symbol} in Trade")
+        }
+        Spacer(Modifier.height(16.dp))
+    }
+}
+
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun SwipeableRow(
     onDelete: () -> Unit,
     onTrade: () -> Unit,
     onEdit: (() -> Unit)?,
+    onTap: () -> Unit,
+    onSwipeRight: (() -> Unit)? = null,
+    swipeRightIsAnalyze: Boolean = false,
     content: @Composable () -> Unit
 ) {
     var menu by remember { mutableStateOf(false) }
     val dismiss = rememberSwipeToDismissBoxState(
         confirmValueChange = {
-            if (it == SwipeToDismissBoxValue.EndToStart) { onDelete(); true } else false
+            when (it) {
+                // Swipe LEFT = delete (dismisses; undo via Snackbar).
+                SwipeToDismissBoxValue.EndToStart -> { onDelete(); true }
+                // Swipe RIGHT = edit/analyze: run the action, snap back.
+                SwipeToDismissBoxValue.StartToEnd -> { onSwipeRight?.invoke(); false }
+                SwipeToDismissBoxValue.Settled -> false
+            }
         }
     )
     // Reset after a programmatic delete so a reused row doesn't stick dismissed.
+    // StartToEnd returns false above, so it settles on its own and never
+    // reaches this effect with a non-Settled value.
     LaunchedEffect(dismiss.currentValue) {
         if (dismiss.currentValue != SwipeToDismissBoxValue.Settled) dismiss.reset()
     }
     Box {
         SwipeToDismissBox(
             state = dismiss,
-            enableDismissFromStartToEnd = false,
+            enableDismissFromStartToEnd = onSwipeRight != null,
             enableDismissFromEndToStart = true,
             backgroundContent = {
-                Box(
-                    Modifier.fillMaxSize().padding(vertical = 4.dp),
-                    contentAlignment = Alignment.CenterEnd
-                ) {
-                    Icon(Icons.Filled.Delete, "Delete", tint = Color.White,
-                        modifier = Modifier.padding(end = 16.dp))
+                when (dismiss.dismissDirection) {
+                    SwipeToDismissBoxValue.StartToEnd -> {
+                        Box(
+                            Modifier
+                                .fillMaxSize()
+                                .background(BronzeGold.copy(alpha = 0.25f))
+                                .padding(vertical = 4.dp),
+                            contentAlignment = Alignment.CenterStart
+                        ) {
+                            Icon(
+                                if (swipeRightIsAnalyze) Icons.Filled.ShowChart else Icons.Filled.Edit,
+                                if (swipeRightIsAnalyze) "Analyze" else "Edit",
+                                tint = BronzeGold,
+                                modifier = Modifier.padding(start = 16.dp)
+                            )
+                        }
+                    }
+                    else -> {
+                        Box(
+                            Modifier
+                                .fillMaxSize()
+                                .background(BearRed.copy(alpha = 0.25f))
+                                .padding(vertical = 4.dp),
+                            contentAlignment = Alignment.CenterEnd
+                        ) {
+                            Icon(
+                                Icons.Filled.Delete, "Delete", tint = Color.White,
+                                modifier = Modifier.padding(end = 16.dp)
+                            )
+                        }
+                    }
                 }
             }
         ) {
@@ -499,7 +760,7 @@ private fun SwipeableRow(
                 modifier = Modifier
                     .fillMaxWidth()
                     .combinedClickable(
-                        onClick = onTrade,
+                        onClick = onTap,
                         onLongClick = { menu = true }
                     )
             ) { content() }

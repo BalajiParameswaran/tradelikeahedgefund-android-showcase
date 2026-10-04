@@ -1,5 +1,6 @@
 package com.tlhf.shared.portfolio
 
+import com.tlhf.shared.data.PricePoint
 import com.tlhf.shared.data.Quote
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
@@ -91,3 +92,46 @@ fun positionUnrealized(p: Position, price: Double): Pair<Double, Double> {
     val pct = if (p.avgCost > 0 && price.isFinite()) (price / p.avgCost - 1.0) * 100.0 else 0.0
     return pnl to pct
 }
+
+/**
+ * Total portfolio value over time, forward-filled: at each timestamp in the
+ * union of all position symbols' histories, every position contributes
+ * shares x its latest close at or before that timestamp. Positions with no
+ * history points at all contribute nothing — values are never invented for
+ * a symbol Yahoo gave us no history for.
+ */
+fun portfolioValueSeries(
+    positions: List<Position>,
+    histories: Map<String, List<PricePoint>>
+): List<PricePoint> {
+    if (positions.isEmpty()) return emptyList()
+    val sortedHistories = positions.map { p ->
+        p to (histories[p.symbol]?.sortedBy { it.epochMs } ?: emptyList())
+    }
+    if (sortedHistories.all { it.second.isEmpty() }) return emptyList()
+    val timestamps = sortedHistories
+        .flatMap { (_, hist) -> hist.map { it.epochMs } }
+        .toSortedSet()
+    val series = mutableListOf<PricePoint>()
+    for (t in timestamps) {
+        var total = 0.0
+        var any = false
+        for ((pos, hist) in sortedHistories) {
+            if (hist.isEmpty()) continue
+            val latest = hist.lastOrNull { it.epochMs <= t } ?: continue
+            total += pos.shares * latest.close
+            any = true
+        }
+        if (any) series += PricePoint(t, total)
+    }
+    return series
+}
+
+/** Symbols of [positions] whose history is missing or empty, in position order, distinct. */
+fun missingHistory(
+    positions: List<Position>,
+    histories: Map<String, List<PricePoint>>
+): List<String> =
+    positions.map { it.symbol }
+        .distinct()
+        .filter { histories[it].isNullOrEmpty() }

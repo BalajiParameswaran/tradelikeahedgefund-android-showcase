@@ -15,8 +15,8 @@ android {
         applicationId = "com.tradelikeahedgefund.app"
         minSdk = 26
         targetSdk = 35
-        versionCode = 24
-        versionName = "5.1.0"
+        versionCode = 25
+        versionName = "5.2.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 

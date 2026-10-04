@@ -1,18 +1,23 @@
 import SwiftUI
 
-/// Learn tab: Lessons | Flashcards | AI Topics | AI Tutor.
-/// One shared AiController owns the single llama.cpp engine; the AI Tutor and
-/// AI Topics views borrow it (two loaded models would blow the RAM budget).
+/// Learn tab: Lessons | Flashcards | AI Tutor.
+/// One shared AiController owns the single llama.cpp engine; the AI Tutor
+/// view borrows it (two loaded models would blow the RAM budget).
 struct LearnView: View {
     @StateObject private var ai = AiController()
     @State private var lessons: [Lesson] = []
     @State private var selected: Lesson?
     @State private var tab = 0
     @State private var tutorPending: String?
+    /// Bumped whenever lesson progress changes so the lessons list — which
+    /// reads progress from the store, not @Published state — re-renders.
+    @State private var progressTick = 0
+    @State private var completedLessons: Set<String> = []
+    private let progressStore = LearnProgressStore()
     /// Question handed off from the Trade tab ("Ask tutor about this trade").
     var externalQuestion: String?
     var onExternalConsumed: () -> Void = {}
-    private let tabs = ["Lessons", "Flashcards", "AI Topics", "AI Tutor"]
+    private let tabs = ["Lessons", "Flashcards", "AI Tutor"]
 
     var body: some View {
         NavigationStack {
@@ -36,11 +41,9 @@ struct LearnView: View {
                 switch tab {
                 case 1:
                     FlashcardsView(lessons: lessons) { prompt in
-                        tutorPending = prompt; tab = 3
+                        tutorPending = prompt; tab = 2
                     }
                 case 2:
-                    AiTopicsView(ai: ai, lessons: lessons) { tab = 3 }
-                case 3:
                     AiTutorView(ai: ai, lessons: lessons,
                                pendingQuestion: tutorPending,
                                onPendingConsumed: { tutorPending = nil })
@@ -50,11 +53,14 @@ struct LearnView: View {
             }
             .background(Color.navyBg)
             .navigationTitle("Learn")
-            .onAppear { load() }
+            .onAppear {
+                load()
+                completedLessons = LearnProgressStore.completedLessons()
+            }
             .onChange(of: externalQuestion) { q in
                 if let q {
                     tutorPending = q
-                    tab = 3
+                    tab = 2
                     onExternalConsumed()
                 }
             }
@@ -79,7 +85,7 @@ struct LearnView: View {
             if AiStore.exists(ai.selectedModel) { return ("Model downloaded — tap to load tutor", .bronzeGold) }
             return ("Tutor model not downloaded — tap to set up", .muted)
         }()
-        return Button { tab = 3 } label: {
+        return Button { tab = 2 } label: {
             HStack(spacing: 8) {
                 Circle().fill(color).frame(width: 10, height: 10)
                 Text(label).font(.subheadline).foregroundColor(.ink)
@@ -95,26 +101,86 @@ struct LearnView: View {
     }
 
     private var lessonsView: some View {
-        ScrollView {
+        // Reading progressTick here makes SwiftUI re-evaluate this view when
+        // a lesson is completed from the detail screen.
+        let _ = progressTick
+        let level = LearnProgressStore.currentLevel()
+        return ScrollView {
             VStack(alignment: .leading, spacing: 12) {
                 if let lesson = selected {
-                    lessonDetail(lesson)
+                    LessonDetailView(lesson: lesson,
+                                     onBack: { selected = nil },
+                                     onComplete: { id in
+                                         LearnProgressStore.markLessonComplete(id)
+                                         completedLessons = LearnProgressStore.completedLessons()
+                                         progressTick += 1
+                                     })
                 } else {
+                    levelBanner(level: level)
                     ForEach(lessons) { lesson in
-                        Button { selected = lesson } label: {
-                            VStack(alignment: .leading, spacing: 4) {
-                                Text(lesson.title).font(.headline).foregroundColor(.bronzeGold)
-                                Text(lesson.tagline).font(.body).foregroundColor(.muted)
-                            }
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .padding(16)
-                            .background(Color.navySurface)
-                            .cornerRadius(10)
-                        }
+                        lessonRow(lesson, level: level)
                     }
                 }
             }
             .padding()
+        }
+    }
+
+    private func levelBanner(level: Int) -> some View {
+        let strategyName = LearnProgressStore.levelStrategyName[LearnProgressStore.levelOrder[level - 1]] ?? ""
+        return VStack(alignment: .leading, spacing: 4) {
+            Text("Level \(level) — \(strategyName)")
+                .font(.headline).foregroundColor(.bronzeGold)
+            Text(LearnProgressStore.canTradeMessage(level: level))
+                .font(.body).foregroundColor(.ink)
+            if level < 6 {
+                let nextId = LearnProgressStore.levelOrder[level - 1]
+                let nextTitle = lessons.first { $0.id == nextId }?.title
+                    ?? LearnProgressStore.levelStrategyName[nextId] ?? nextId
+                Text("Next: finish '\(nextTitle)' to reach Level \(level + 1).")
+                    .font(.caption).foregroundColor(.muted)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(16)
+        .background(Color.navySurface)
+        .cornerRadius(10)
+    }
+
+    @ViewBuilder
+    private func lessonRow(_ lesson: Lesson, level: Int) -> some View {
+        let isCompleted = completedLessons.contains(lesson.id)
+        if LearnProgressStore.isUnlocked(lesson.id) {
+            Button { selected = lesson } label: {
+                VStack(alignment: .leading, spacing: 4) {
+                    HStack(spacing: 8) {
+                        Text(lesson.title).font(.headline).foregroundColor(.bronzeGold)
+                        if isCompleted {
+                            Text("✓ Completed").font(.caption).foregroundColor(.bullGreen)
+                        }
+                    }
+                    Text(lesson.tagline).font(.body).foregroundColor(.muted)
+                    if !isCompleted, let lp = progressStore.lessonProgress(lesson.id), !lp.answers.isEmpty {
+                        Text("In progress — \(lp.answers.count) answered")
+                            .font(.caption).foregroundColor(.bronzeGold)
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(16)
+                .background(Color.navySurface)
+                .cornerRadius(10)
+            }
+        } else {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(lesson.title).font(.headline).foregroundColor(.muted)
+                Text(lesson.tagline).font(.body).foregroundColor(.muted)
+                Text("Locked — finish the previous lesson to unlock.")
+                    .font(.caption).foregroundColor(.muted)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(16)
+            .background(Color.navySurface)
+            .cornerRadius(10)
         }
     }
 
@@ -125,12 +191,30 @@ struct LearnView: View {
               let decoded = try? JSONDecoder().decode([Lesson].self, from: data) else { return }
         lessons = decoded
     }
+}
 
-    private func lessonDetail(_ lesson: Lesson) -> some View {
+/// One lesson's full content: learn bullets, tip, and its quiz cards.
+/// The lesson is complete when every quiz question has been answered
+/// correctly at least once (retries count — correct picks latch by index).
+struct LessonDetailView: View {
+    let lesson: Lesson
+    var onBack: () -> Void
+    var onComplete: (String) -> Void
+
+    @State private var correctLatch: Set<Int> = []
+    @State private var completedFired = false
+    private let progressStore = LearnProgressStore()
+
+    var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Button("← All lessons") { selected = nil }.tint(.bronzeGold)
+            Button("← All lessons") { onBack() }.tint(.bronzeGold)
             Text(lesson.title).font(.title2).bold().foregroundColor(.ink)
             Text(lesson.tagline).font(.headline).foregroundColor(.bronzeGold)
+            if progressStore.lessonProgress(lesson.id)?.finished == true {
+                Text("✓ Lesson finished — you answered every quiz question.")
+                    .foregroundColor(.bullGreen)
+                    .padding(12).background(Color.bullGreen.opacity(0.15)).cornerRadius(8)
+            }
             ForEach(lesson.learn, id: \.self) { bullet in
                 Text("• \(bullet)").foregroundColor(.ink)
                     .padding(12).background(Color.navySurface).cornerRadius(8)
@@ -139,22 +223,75 @@ struct LearnView: View {
                 .padding(12).background(Color.navySurface).cornerRadius(8)
             Text("Quiz").font(.headline).foregroundColor(.bronzeGold)
             ForEach(Array((lesson.quiz + lesson.extraQuiz).enumerated()), id: \.element.id) { i, q in
-                QuizCardView(question: q, index: i)
+                QuizCardView(
+                    question: q,
+                    index: i,
+                    initialPicked: progressStore.lessonProgress(lesson.id)?.answers[i],
+                    onAnswered: { correct in
+                        if correct {
+                            correctLatch.insert(i)
+                            checkComplete()
+                        }
+                    },
+                    onPick: { pick in
+                        progressStore.recordLessonAnswer(
+                            lessonId: lesson.id, questionIndex: i, picked: pick,
+                            totalQuestions: (lesson.quiz + lesson.extraQuiz).count)
+                    })
+            }
+            if completedFired {
+                Text("Lesson complete — check the Lessons list for your new level.")
+                    .font(.body).foregroundColor(.bullGreen)
             }
         }
+        .onAppear {
+            // Restore a half-finished lesson: answers saved by an earlier
+            // visit seed the correct latch (each card restores its own pick
+            // via initialPicked), so resuming can still complete the lesson.
+            let saved = progressStore.lessonProgress(lesson.id)?.answers ?? [:]
+            let qs = lesson.quiz + lesson.extraQuiz
+            for (qi, pick) in saved where qi < qs.count && qs[qi].answerIndex == pick {
+                correctLatch.insert(qi)
+            }
+            checkComplete()
+        }
+    }
+
+    private func checkComplete() {
+        let total = (lesson.quiz + lesson.extraQuiz).count
+        guard total > 0, correctLatch.count >= total, !completedFired else { return }
+        completedFired = true
+        onComplete(lesson.id)
     }
 }
 
 struct QuizCardView: View {
     let question: QuizQuestion
     let index: Int
+    var onAnswered: ((Bool) -> Void)? = nil
+    var onPick: ((Int) -> Void)? = nil
     @State private var picked: Int?
+
+    init(question: QuizQuestion, index: Int, initialPicked: Int? = nil,
+         onAnswered: ((Bool) -> Void)? = nil, onPick: ((Int) -> Void)? = nil) {
+        self.question = question
+        self.index = index
+        self.onAnswered = onAnswered
+        self.onPick = onPick
+        _picked = State(initialValue: initialPicked)
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             Text("Q\(index + 1). \(question.question)").font(.body).foregroundColor(.ink)
             ForEach(question.choices.indices, id: \.self) { ci in
-                Button { if picked == nil { picked = ci } } label: {
+                Button {
+                    if picked == nil {
+                        picked = ci
+                        onPick?(ci)
+                        onAnswered?(ci == question.answerIndex)
+                    }
+                } label: {
                     Text(question.choices[ci])
                         .foregroundColor(.ink)
                         .frame(maxWidth: .infinity, alignment: .leading)

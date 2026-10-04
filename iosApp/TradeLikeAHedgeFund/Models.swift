@@ -16,6 +16,77 @@ enum StrategyType: String, CaseIterable, Identifiable {
     var id: String { rawValue }
 }
 
+/// Plain-English market view, mirroring shared KMP `Outlook` (Outlook.kt).
+enum Outlook: String, CaseIterable, Identifiable {
+    case up = "Up"
+    case down = "Down"
+    case flat = "Flat"
+    case swing = "Swing"
+    var id: String { rawValue }
+}
+
+extension StrategyType {
+    /// Strategies that fit [outlook], in `allCases` (declaration) order.
+    /// Membership mirrors shared `strategiesForOutlook` exactly:
+    /// up = {bullCallSpread, leapsCall, coveredCall, cashSecuredPut},
+    /// down = {bearPutSpread},
+    /// flat = {ironCondor, ironButterfly, coveredCall, cashSecuredPut},
+    /// swing = {longStraddle, longStrangle}.
+    static func strategies(for outlook: Outlook) -> [StrategyType] {
+        let wanted: Set<StrategyType>
+        switch outlook {
+        case .up: wanted = [.bullCallSpread, .leapsCall, .coveredCall, .cashSecuredPut]
+        case .down: wanted = [.bearPutSpread]
+        case .flat: wanted = [.ironCondor, .ironButterfly, .coveredCall, .cashSecuredPut]
+        case .swing: wanted = [.longStraddle, .longStrangle]
+        }
+        return StrategyType.allCases.filter { wanted.contains($0) }
+    }
+
+    /// Inverse of `strategies(for:)` — computed from it so the two never drift.
+    var outlooks: Set<Outlook> {
+        Set(Outlook.allCases.filter { StrategyType.strategies(for: $0).contains(self) })
+    }
+
+    /// Strategies that make sense for someone who already holds the stock
+    /// (or cash to secure a put). Mirrors shared `holderStrategies()`.
+    static var holderStrategies: Set<StrategyType> {
+        [.coveredCall, .cashSecuredPut, .bullCallSpread, .bearPutSpread, .leapsCall]
+    }
+
+    /// The Trade deck for an outlook / holding state, in `allCases` order.
+    /// When the holder intersection would empty the deck, the outlook-only
+    /// (or full) list is used instead — the deck is never empty.
+    /// Mirrors shared `filterDeck`.
+    static func filterDeck(outlook: Outlook?, hasPosition: Bool) -> [StrategyType] {
+        let byOutlook: [StrategyType]
+        if let outlook {
+            byOutlook = strategies(for: outlook)
+        } else {
+            byOutlook = StrategyType.allCases
+        }
+        if !hasPosition { return byOutlook }
+        let intersected = byOutlook.filter { holderStrategies.contains($0) }
+        return intersected.isEmpty ? byOutlook : intersected
+    }
+}
+
+/// Lesson that teaches [type]. Related strategies share their closest
+/// lesson. Mirrors shared `lessonIdForStrategy` (RiskQuiz.kt).
+func lessonId(for type: StrategyType) -> String {
+    switch type {
+    case .coveredCall: return "coveredCall"
+    case .cashSecuredPut: return "cashPut"
+    case .bullCallSpread: return "bullCall"
+    case .bearPutSpread: return "bearPut"
+    case .ironCondor: return "ironCondor"
+    case .ironButterfly: return "ironCondor"
+    case .leapsCall: return "leapsCall"
+    case .longStraddle: return "leapsCall"
+    case .longStrangle: return "leapsCall"
+    }
+}
+
 struct OptionLeg: Identifiable {
     let id = UUID()
     var strike: Double

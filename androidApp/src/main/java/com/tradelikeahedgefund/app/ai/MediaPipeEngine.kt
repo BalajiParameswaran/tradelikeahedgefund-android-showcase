@@ -4,6 +4,7 @@ import android.content.Context
 import com.google.mediapipe.tasks.genai.llminference.LlmInference
 import com.google.mediapipe.tasks.genai.llminference.ProgressListener
 import com.tlhf.shared.ai.LlmEngine
+import com.tlhf.shared.ai.wrapChatMlUserTurn
 
 /**
  * Android on-device LLM via MediaPipe `LlmInference` (tasks-genai).
@@ -55,13 +56,30 @@ class MediaPipeEngine(private val context: Context) : LlmEngine {
         }
         Thread {
             try {
-                // MediaPipe streams CUMULATIVE text (each callback has the full
-                // response so far) — forward it as-is, like the web app did.
-                engine.generateResponseAsync(prompt, ProgressListener<String> { partial, done ->
-                    onToken(partial)
+                // Qwen needs ChatML framing: the shared builders return plain
+                // text, and sending it raw (no <|im_start|> turn structure)
+                // made the model return empty completions. iOS already wraps
+                // its prompts in LlamaEngine.swift.
+                val framed = wrapChatMlUserTurn(prompt)
+                // Do NOT trust any single callback's `partial` as the full
+                // text: in tasks-genai the terminal callback can carry an
+                // empty / last-chunk string instead of the whole response,
+                // which is exactly how empty answer bubbles were saved.
+                // Accumulate ourselves — a partial that starts with what we
+                // already have is a cumulative snapshot, anything else is a
+                // delta chunk to append.
+                var accumulated = ""
+                engine.generateResponseAsync(framed, ProgressListener<String> { partial, done ->
+                    val chunk = partial ?: ""
+                    accumulated = if (chunk.startsWith(accumulated)) chunk else accumulated + chunk
+                    onToken(accumulated)
                     if (done) {
                         synchronized(genLock) { generating = false }
-                        onDone(partial, null)
+                        if (accumulated.isBlank()) {
+                            onDone(null, "The model didn't produce a reply — please try again.")
+                        } else {
+                            onDone(accumulated, null)
+                        }
                     }
                 })
             } catch (e: Exception) {

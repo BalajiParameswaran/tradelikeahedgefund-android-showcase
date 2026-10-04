@@ -42,15 +42,14 @@ URL shown in the model picker.
   generation, single-generation lock, explicit unload.
 - `AiChatStore.swift` — chat history in the iOS Keychain
   (`tlhf_ai_sessions_v1` schema, max 10 sessions × 40 messages).
-- `AiController.swift` — one shared engine for the Tutor + Topics tabs,
+- `AiController.swift` — one shared engine for the AI Tutor tab,
   Wi-Fi-only switch, 30-minute idle unload.
 - `AiTutorView.swift` — chat UI + model manager.
-- `AiTopicsView.swift` — 5 dynamic flashcards per ticker + strategy.
 - `FlashcardsView.swift` — static 54-card deck (30 quiz + 24 info),
   shuffled runs, best scores in UserDefaults, "review my mistakes" hands
   the missed questions to the tutor.
-- `LearnView.swift` — Learn tab now has Lessons | Flashcards | AI Topics |
-  AI Tutor sub-tabs.
+- `LearnView.swift` — Learn tab now has Lessons | Flashcards |
+  AI Tutor sub-tabs (the AI Topics tab was removed in the app-flow revamp).
 
 All ten files are already registered in
 `TradeLikeAHedgeFund.xcodeproj/project.pbxproj` — just open the project

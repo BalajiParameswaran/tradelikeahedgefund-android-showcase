@@ -35,10 +35,19 @@ final class ModelDownloader: NSObject, ObservableObject, URLSessionDownloadDeleg
         let dest = AiStore.file(for: model)
         destURL = dest
         if FileManager.default.fileExists(atPath: dest.path) {
-            totalBytes = (try? FileManager.default.attributesOfItem(atPath: dest.path)[.size] as? Int64) ?? 0
-            downloadedBytes = totalBytes
-            state = .done
-            return
+            let existing = (try? FileManager.default.attributesOfItem(atPath: dest.path)[.size] as? Int64) ?? 0
+            // Mirror of Android's completeness rule: a file whose size does
+            // not match the catalog is a truncated leftover, not a downloaded
+            // model — delete it and fall through to a fresh download instead
+            // of reporting .done for a file that will fail to load.
+            if model.sizeBytes > 0 && existing != model.sizeBytes {
+                try? FileManager.default.removeItem(at: dest)
+            } else {
+                totalBytes = existing
+                downloadedBytes = totalBytes
+                state = .done
+                return
+            }
         }
         totalBytes = model.sizeBytes
         state = .downloading
@@ -48,6 +57,9 @@ final class ModelDownloader: NSObject, ObservableObject, URLSessionDownloadDeleg
     }
 
     func pause() {
+        // No mirror of Android's pause fix is needed: cancel(byProducingResumeData:)
+        // already closes the connection and hands back resume data, and there is
+        // no retry-attempt budget here for an idle-socket kill to burn.
         guard case .downloading = state else { return }
         task?.cancel(byProducingResumeData: { [weak self] data in
             Task { @MainActor in
@@ -103,6 +115,17 @@ final class ModelDownloader: NSObject, ObservableObject, URLSessionDownloadDeleg
                                didFinishDownloadingTo location: URL) {
         Task { @MainActor in
             guard let dest = self.destURL else { return }
+            // Completeness check (mirrors Android): URLSession finishing is
+            // not proof the bytes match the catalog — validate the size
+            // before moving the file into place, and fail instead of
+            // installing a truncated model that will not load.
+            let expected = self.model?.sizeBytes ?? 0
+            let actual = (try? FileManager.default.attributesOfItem(atPath: location.path)[.size] as? Int64) ?? -1
+            if expected > 0 && actual != expected {
+                try? FileManager.default.removeItem(at: location)
+                self.state = .failed("Incomplete download: got \(actual) of \(expected) bytes")
+                return
+            }
             try? FileManager.default.removeItem(at: dest)
             do {
                 try FileManager.default.moveItem(at: location, to: dest)

@@ -18,6 +18,7 @@ struct AiTutorView: View {
     @State private var ticker = ""
     @State private var studyCards: [DynamicCard] = []
     @State private var studyBusy = false
+    @State private var studyNote: String?
     @State private var showSessions = false
     @State private var showModelManager = false
 
@@ -37,11 +38,25 @@ struct AiTutorView: View {
             }
             .padding(.horizontal)
 
+            // Search-style: the ask box sits right under the header; the
+            // conversation fills the space below it.
+            HStack(spacing: 8) {
+                TextField("Ask about options…", text: $input, axis: .vertical)
+                    .textFieldStyle(.roundedBorder)
+                Button { send() } label: { Image(systemName: "arrow.up.circle.fill") }
+                    .font(.title2).tint(.bronzeGold)
+                    .disabled(streaming || input.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            }
+            .padding()
+
             if !ai.engineLoaded {
                 Button("Load the on-device model to start chatting") { showModelManager = true }
                     .buttonStyle(.borderedProminent).tint(.bronzeGold)
-                    .padding()
+                    .padding(.horizontal)
+                    .padding(.bottom, 8)
             }
+
+            if let sendError { Text(sendError).foregroundColor(.bearRed).font(.caption).padding(.horizontal) }
 
             ScrollViewReader { proxy in
                 ScrollView {
@@ -58,6 +73,9 @@ struct AiTutorView: View {
                             .padding(12).background(Color.navySurface).cornerRadius(10)
                             .id("stream")
                         }
+                        if let studyNote {
+                            Text(studyNote).font(.caption).foregroundColor(.muted)
+                        }
                         if !studyCards.isEmpty {
                             Text("Study cards from the last answer").font(.headline).foregroundColor(.bronzeGold)
                             DynamicCardsView(cards: studyCards)
@@ -67,17 +85,6 @@ struct AiTutorView: View {
                     .onChange(of: streamText) { proxy.scrollTo("stream", anchor: .bottom) }
                 }
             }
-
-            if let sendError { Text(sendError).foregroundColor(.bearRed).font(.caption).padding(.horizontal) }
-
-            HStack(spacing: 8) {
-                TextField("Ask about options…", text: $input, axis: .vertical)
-                    .textFieldStyle(.roundedBorder)
-                Button { send() } label: { Image(systemName: "arrow.up.circle.fill") }
-                    .font(.title2).tint(.bronzeGold)
-                    .disabled(streaming || input.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-            }
-            .padding()
 
             if let last = active?.messages.last, last.role == "assistant", !streaming {
                 Button(studyBusy ? "Making cards…" : "Make study cards from this answer") {
@@ -136,6 +143,7 @@ struct AiTutorView: View {
         refresh()
         input = ""
         studyCards = []
+        studyNote = nil
         sendError = nil
         streaming = true
         streamText = ""
@@ -163,17 +171,37 @@ struct AiTutorView: View {
     private func makeStudyCards(from answer: String) {
         guard ai.engineLoaded, !studyBusy else { return }
         studyBusy = true
+        studyNote = nil
         ai.touch()
         let topic = String(answer.prefix(120))
+        let label = AiPrompts.matchLessonTitle(answer, lessons: lessons) ?? "Options basics"
         let prompt = AiPrompts.studyDeck(topic: topic, lessonTitle: AiPrompts.matchLessonTitle(answer, lessons: lessons))
         ai.engine.generate(system: AiPrompts.tutorSystem(), prompt: prompt, onToken: { _ in }) { full, err in
             studyBusy = false
             if let full {
                 let cards = parseAiCards(full, expected: 6)
-                if cards.isEmpty { sendError = "Couldn't build cards from that answer — try again." }
-                studyCards = cards
+                if !cards.isEmpty {
+                    studyCards = cards
+                } else {
+                    // Designed fallback: serve the built-in deck for the
+                    // matched lesson instead of a dead end.
+                    let fb = staticStudyCards(label)
+                    if !fb.isEmpty {
+                        studyCards = fb
+                        studyNote = "The model didn't return usable cards, so here are the built-in cards for \(label)."
+                    } else {
+                        sendError = "The model didn't return usable cards — try again."
+                    }
+                }
             } else if let err { sendError = err.localizedDescription }
         }
+    }
+
+    /// Built-in static cards for a lesson title, as tutor study cards.
+    private func staticStudyCards(_ label: String) -> [DynamicCard] {
+        guard let lesson = lessons.first(where: { $0.title == label }) else { return [] }
+        guard let deck = buildFlashDecks(lessons: lessons).first(where: { $0.id == "lesson-\(lesson.id)" }) else { return [] }
+        return deck.cards.prefix(6).map { DynamicCard(front: $0.front, back: $0.back) }
     }
 
     private var sessionsSheet: some View {
@@ -250,13 +278,13 @@ struct ModelManagerView: View {
                 .disabled(!ai.canDownload)
                 if !ai.canDownload { Text("Waiting for Wi-Fi…").font(.caption).foregroundColor(.muted) }
             case .downloading:
-                ProgressView(value: d.progress) { Text("Downloading \(Int(d.progress * 100))%") }
+                ProgressView(value: d.progress) { Text("🐂 Downloading \(Int(d.progress * 100))%") }
                 HStack {
                     Button("Pause") { d.pause() }.buttonStyle(.bordered)
                     Button("Cancel", role: .destructive) { d.cancel() }.buttonStyle(.bordered)
                 }
             case .paused:
-                ProgressView(value: d.progress) { Text("Paused at \(Int(d.progress * 100))%") }
+                ProgressView(value: d.progress) { Text("🐂 Paused at \(Int(d.progress * 100))%") }
                 HStack {
                     Button("Resume") { d.resume() }.buttonStyle(.borderedProminent).tint(.bronzeGold)
                     Button("Cancel", role: .destructive) { d.cancel() }.buttonStyle(.bordered)
