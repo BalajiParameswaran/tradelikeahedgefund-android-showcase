@@ -3,8 +3,20 @@ name: iOS Build
 on:
   push:
     branches: [ main, integrate/whiteboard-revamp ]
+    paths:
+      - 'iosApp/**'
+      - 'shared/**'
+      - 'build.gradle.kts'
+      - 'settings.gradle.kts'
+      - '.github/workflows/ios.yml'
   pull_request:
     branches: [ main, integrate/whiteboard-revamp ]
+    paths:
+      - 'iosApp/**'
+      - 'shared/**'
+      - 'build.gradle.kts'
+      - 'settings.gradle.kts'
+      - '.github/workflows/ios.yml'
 
 jobs:
   build-ios:
@@ -26,8 +38,10 @@ jobs:
       - name: Grant execute permission for gradlew
         run: chmod +x gradlew
 
-      - name: Build Shared KMP Framework for iOS
-        run: ./gradlew :shared:embedAndSignAppleFrameworkForXcode
+      # NOTE: no standalone "embedAndSignAppleFrameworkForXcode" step here:
+      # that Gradle task is designed to be invoked BY Xcode during the app
+      # build (it reads Xcode-provided environment variables) and fails when
+      # run bare from CI with exit code 1.
 
       - name: Build iOS App with xcodebuild
         run: |
