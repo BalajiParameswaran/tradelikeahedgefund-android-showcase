@@ -1,8 +1,10 @@
 package com.tradelikeahedgefund.app.ui
 
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -31,6 +33,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -45,16 +48,25 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.tlhf.shared.learn.LESSONS
+import com.tlhf.shared.learn.lessonIdForStrategy
+import com.tlhf.shared.learn.riskQuizFor
+import com.tlhf.shared.learn.riskVerdict
+import com.tlhf.shared.portfolio.decodePortfolio
 import com.tlhf.shared.pricing.bsGreeks
 import com.tlhf.shared.strategies.Leg
+import com.tlhf.shared.strategies.Outlook
 import com.tlhf.shared.strategies.StrategyResult
 import com.tlhf.shared.strategies.StrategyType
 import com.tlhf.shared.strategies.analyze
+import com.tlhf.shared.strategies.filterDeck
 import com.tlhf.shared.strategies.legRiskPlainEnglish
+import com.tradelikeahedgefund.app.ai.AiPlatform
 import com.tradelikeahedgefund.app.ui.theme.BearRed
 import com.tradelikeahedgefund.app.ui.theme.BronzeGold
 import com.tradelikeahedgefund.app.ui.theme.BullGreen
@@ -95,6 +107,18 @@ private fun money(v: Double): String {
     return (if (r < 0) "-" else "") + "$$a"
 }
 
+// Duplicated from PortfolioScreen's trimNum (file-private there): whole
+// numbers render without a trailing ".0".
+private fun trimNum(v: Double): String =
+    if (v == v.toLong().toDouble()) v.toLong().toString() else v.toString()
+
+private fun outlookLabel(outlook: Outlook): String = when (outlook) {
+    Outlook.UP -> "Up"
+    Outlook.DOWN -> "Down"
+    Outlook.FLAT -> "Flat"
+    Outlook.SWING -> "Swing"
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun TradeScreen(
@@ -120,11 +144,59 @@ fun TradeScreen(
     var result by remember { mutableStateOf<StrategyResult?>(null) }
     val scroll = rememberScrollState()
 
+    // --- Workstream 2F: outlook filter + portfolio position context ---
+    var outlook by remember { mutableStateOf<Outlook?>(null) }
+    var quizOpen by remember { mutableStateOf(false) }
+    var quizKey by remember { mutableIntStateOf(0) }
+    val context = LocalContext.current
+    val positions = remember(symbol) {
+        decodePortfolio(AiPlatform.storage(context).get("state_json") ?: "").positions
+    }
+    val held = positions.firstOrNull { it.symbol.equals(symbol.trim(), ignoreCase = true) }
+    val hasPosition = held != null
+    val deck = remember(outlook, hasPosition) { filterDeck(outlook, hasPosition) }
+
+    LaunchedEffect(deck) {
+        if (type !in deck) {
+            type = deck.first()
+            result = null
+        }
+    }
+
     Column(
         Modifier.fillMaxSize().verticalScroll(scroll).padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
+        E2eNotice()
         Text("Trade", style = MaterialTheme.typography.headlineSmall, color = Ink)
+
+        // --- Workstream 2F: "What do you think?" outlook selector ---
+        Text("What do you think?", color = Muted, style = MaterialTheme.typography.labelLarge)
+        Row(
+            Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            OutlookChip(label = "Any", selected = outlook == null) { outlook = null }
+            Outlook.entries.forEach { o ->
+                OutlookChip(label = outlookLabel(o), selected = outlook == o) { outlook = o }
+            }
+        }
+        when {
+            hasPosition -> {
+                val heldShares = held?.let { trimNum(it.shares) } ?: "0"
+                Text(
+                    "You hold $heldShares shares of $symbol — the deck is filtered to strategies that fit a holder" +
+                        (if (outlook != null) " and your outlook." else ""),
+                    color = Muted, style = MaterialTheme.typography.bodySmall
+                )
+            }
+            outlook != null -> {
+                Text(
+                    "Showing strategies for a '${outlookLabel(outlook!!)}' outlook.",
+                    color = Muted, style = MaterialTheme.typography.bodySmall
+                )
+            }
+        }
 
         ExposedDropdownMenuBox(expanded = expanded, onExpandedChange = { expanded = it }) {
             OutlinedTextField(
@@ -136,7 +208,7 @@ fun TradeScreen(
                 modifier = Modifier.menuAnchor().fillMaxWidth()
             )
             ExposedDropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
-                StrategyType.entries.forEach { t ->
+                deck.forEach { t ->
                     DropdownMenuItem(
                         text = { Text(t.name.replace('_', ' ').lowercase().replaceFirstChar { it.uppercase() }) },
                         onClick = { type = t; expanded = false; result = null }
@@ -206,6 +278,8 @@ fun TradeScreen(
                 if (parsed.isEmpty()) return@Button
                 val (qty, basis) = if (type == StrategyType.COVERED_CALL) 100 to s else 0 to 0.0
                 result = analyze(type, parsed, s, qty, basis)
+                quizOpen = false
+                quizKey++
             },
             modifier = Modifier.fillMaxWidth()
         ) { Text("Analyze") }
@@ -237,6 +311,14 @@ fun TradeScreen(
                         },
                         modifier = Modifier.fillMaxWidth()
                     ) { Text("Ask tutor about this trade") }
+                    Spacer(Modifier.height(4.dp))
+                    OutlinedButton(
+                        onClick = { quizOpen = !quizOpen },
+                        modifier = Modifier.fillMaxWidth()
+                    ) { Text("Check your risk understanding") }
+                    if (quizOpen) {
+                        RiskQuiz(type = type, quizKey = quizKey)
+                    }
                 }
             }
             // Greeks for the first leg (priced with the shared Black-Scholes core).
@@ -253,6 +335,105 @@ fun TradeScreen(
                     }
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun OutlookChip(label: String, selected: Boolean, onClick: () -> Unit) {
+    Card(
+        colors = CardDefaults.cardColors(
+            containerColor = if (selected) BronzeGold.copy(alpha = 0.25f) else NavySurface
+        ),
+        modifier = Modifier.clickable { onClick() }
+    ) {
+        Text(
+            label, color = Ink, style = MaterialTheme.typography.labelMedium,
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)
+        )
+    }
+}
+
+/**
+ * Post-analysis risk quiz (workstream 2F): re-answers the mapped lesson's
+ * questions for the analyzed strategy. Lives inside the result card, so it
+ * disappears whenever a field edit clears the result; a fresh Analyze resets
+ * it via [quizKey]. Rendering mirrors the Learn tab's QuizCard.
+ */
+@Composable
+private fun RiskQuiz(type: StrategyType, quizKey: Int) {
+    var attempt by remember(type, quizKey) { mutableIntStateOf(0) }
+    val questions = remember(type, quizKey) { riskQuizFor(type) }
+    var picked by remember(type, quizKey, attempt) { mutableStateOf<Map<Int, Int>>(emptyMap()) }
+
+    if (questions.isEmpty()) {
+        Text(
+            "No risk questions are available for this strategy.",
+            color = Muted, style = MaterialTheme.typography.bodyMedium
+        )
+        return
+    }
+
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        questions.forEachIndexed { qi, q ->
+            Text(
+                "Q${qi + 1}. ${q.question}",
+                color = Ink, style = MaterialTheme.typography.bodyLarge
+            )
+            q.choices.forEachIndexed { ci, choice ->
+                val answered = picked.containsKey(qi)
+                val bg = when {
+                    !answered -> NavySurface
+                    ci == q.answerIndex -> BullGreen.copy(alpha = 0.25f)
+                    ci == picked[qi] -> BearRed.copy(alpha = 0.25f)
+                    else -> NavySurface
+                }
+                Card(
+                    colors = CardDefaults.cardColors(containerColor = bg),
+                    modifier = Modifier.fillMaxWidth().clickable {
+                        if (!answered) picked = picked + (qi to ci)
+                    }
+                ) {
+                    Text(choice, color = Ink, modifier = Modifier.padding(10.dp))
+                }
+            }
+            picked[qi]?.let { p ->
+                Text(
+                    if (p == q.answerIndex) "Correct. " else "Not quite. ",
+                    color = if (p == q.answerIndex) BullGreen else BearRed
+                )
+                Text(q.explanation, color = Muted, style = MaterialTheme.typography.bodyMedium)
+            }
+        }
+
+        if (picked.size == questions.size) {
+            val correct = questions.indices.count { picked[it] == questions[it].answerIndex }
+            val passed = riskVerdict(correct, questions.size)
+            Card(
+                colors = CardDefaults.cardColors(
+                    containerColor = if (passed) BullGreen.copy(alpha = 0.25f) else BearRed.copy(alpha = 0.25f)
+                )
+            ) {
+                Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text(
+                        if (passed) {
+                            "You scored $correct/${questions.size} — you understand the risk on this trade."
+                        } else {
+                            "You scored $correct/${questions.size} — you don't yet understand the risk on this trade."
+                        },
+                        color = if (passed) BullGreen else BearRed,
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                    if (!passed) {
+                        val lessonTitle = LESSONS.firstOrNull { it.id == lessonIdForStrategy(type) }?.title ?: "the lesson"
+                        Text(
+                            "Review '$lessonTitle' in the Learn tab and re-read the plain-English risks above before trading this.",
+                            color = Muted, style = MaterialTheme.typography.bodySmall
+                        )
+                    }
+                }
+            }
+            TextButton(onClick = { picked = emptyMap(); attempt++ }) { Text("Retake quiz") }
         }
     }
 }
